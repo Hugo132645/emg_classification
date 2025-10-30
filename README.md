@@ -7,7 +7,7 @@ Three modeling tracks run in parallel and share a common data layer:
 - CNN (time–frequency images)
 - RNN/BRNN (temporal sequences)
 
-This repository is structured so every team uses the same schema, preprocessing, and windowing. You can develop and validate models on dummy data before hardware arrives.
+This repository is structured so every individual uses the same schema, preprocessing, and windowing. You can develop and validate models on dummy data before hardware arrives.
 
 ---
 
@@ -80,7 +80,7 @@ emg-prosthetic/
 └─ README.md
 ```
 
-Note: The specific training/evaluation scripts are intentionally omitted here. Teams are expected to implement their own CLIs or notebooks in their respective folders using the shared common layer. The team members are also free to adjust the structure depending on what suits their needs.
+Note: The specific training/evaluation scripts are intentionally omitted here. Members are expected to implement their own CLIs or notebooks in their respective folders using the shared common layer. The team is also free to adjust the structure depending on what suits their needs.
 
 ---
 
