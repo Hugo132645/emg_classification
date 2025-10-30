@@ -255,4 +255,4 @@ Git workflow:
 
 ## License
 
-MIT (or your preferred license). Add a `LICENSE` file to the repository root.
+MIT
