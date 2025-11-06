@@ -5,8 +5,8 @@ sample_rate_hz: 1000
 num_channels: 3
 
 # Filtering
-bandpass_hz: [20.0, 450.0]
-notch_hz: 50.0
+bandpass_hz: None
+notch_hz: None
 
 # Windowing
 window_size_ms: 200
