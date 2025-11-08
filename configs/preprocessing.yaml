@@ -9,8 +9,8 @@ bandpass_hz: None
 notch_hz: None
 
 # Windowing
-window_size_ms: 200
-hop_size_ms: 100
+window_ms: 200
+hop_ms: 100
 
 # Gestures & labels
 gestures:
