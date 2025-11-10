@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy.signal import butter, sosfiltfilt
 
-def generate_dummy_emg(seconds, fs, classes, block_s=5, mode="raw", seed=None) -> tuple[pd.DataFrame, list[str], list[tuple[int, int]]]:
+def generate_dummy_emg(seconds, fs, classes, block_s=5, mode="raw", seed=None, channel = "multi") -> tuple[pd.DataFrame, list[str], list[tuple[int, int]]]:
     #Applying replicable seed
     if seed is not None:
         np.random.seed(seed)
@@ -55,6 +55,7 @@ def generate_dummy_emg(seconds, fs, classes, block_s=5, mode="raw", seed=None) -
             noise = np.random.randn(end_block - iterator)
             burst = sosfiltfilt(sos, noise)
             burst = amp * burst / np.max(np.abs(burst))
+            #Make sure max is not zero
 
         signal[iterator:end_block] = burst
         label[iterator:end_block] = class_name
@@ -75,9 +76,12 @@ def generate_dummy_emg(seconds, fs, classes, block_s=5, mode="raw", seed=None) -
         signal = sosfiltfilt(sos_env, rectified)
 
 
-    #Adding laplace noise
-    noise = np.random.laplace(0, 0.02, num_samples)
-    signal += noise
 
+    #Slightly different version for multi_channel vs single_channel input
+    if channel == "single":
+        noise = np.random.laplace(0, 0.03 / np.sqrt(2), num_samples)
+    else:
+        noise = np.random.normal(0, 0.02, num_samples)
+    signal += noise
     df = pd.DataFrame({'time': time, 'signal': signal, 'label': label})
     return df, interval_labels, timestamps_ms

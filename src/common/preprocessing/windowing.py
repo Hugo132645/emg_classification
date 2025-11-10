@@ -1,12 +1,12 @@
 import pandas as pd
 import numpy as np
 
-def window_signal(x, fs, win_ms=200, hop_ms=100, labels=None, timestamps_ms=None) -> tuple[np.ndarray,np.ndarray, np.ndarray]:
+def window_signal(x, fs, window_ms=200, hop_ms=100, labels=None, timestamps_ms=None) -> tuple[np.ndarray, list, np.ndarray]:
     #Copied 1D array not to change value
     x = x.copy()
     x = np.nan_to_num(x, nan=0.0).astype(np.float32)
 
-    win_len = int(fs * win_ms / 1000)
+    win_len = int(fs * window_ms / 1000)
     hop_len = int(fs * hop_ms / 1000)
     n_samples = len(x)
 
@@ -37,7 +37,6 @@ def window_signal(x, fs, win_ms=200, hop_ms=100, labels=None, timestamps_ms=None
         window_labels.append(majority_vote)
 
 
-    window_labels = np.array(window_labels)
     windows = np.stack(windows).astype(np.float32)
     times_ms = np.array(times_ms).astype(np.float32)
 
