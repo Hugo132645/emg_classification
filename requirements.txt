@@ -1,3 +1,9 @@
+# requirements.txt
+numpy>=1.22
+scipy>=1.8
+
+# Only if you must run on Python < 3.8 (for Literal support):
+typing_extensions>=4.6 ; python_version < "3.8"
 #dummy_data.py + windowing.py
 numpy>=2.2.6
 pandas>=2.2.3
