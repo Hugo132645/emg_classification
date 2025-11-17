@@ -1,0 +1,52 @@
+# EMG Preprocessing
+
+# Signal / acquisition
+sample_rate_hz: 1000            
+num_channels: 3
+
+# Filtering
+bandpass_hz: None
+notch_hz: None
+
+# Windowing
+window_ms: 200
+hop_ms: 100
+
+# Gestures & labels
+gestures:
+  - rest
+  - fist
+  - open
+  - pinch
+
+label_map:
+  rest: 0
+  fist: 1
+  open: 2
+  pinch: 3
+
+# Data collection protocol
+protocol:
+  rest_duration_s: 5
+  cue_duration_s: 0
+  hold_duration_s: 3
+  relax_duration_s: 2
+  repetitions_per_gesture: 10
+  sessions_per_day: 2
+  days: 3
+
+# File templates
+# Raw file
+raw_file_template: "data/raw/{subject_id}/{session_date}/session_{session_id}.parquet"
+
+# Processed file
+features_file_template: "data/processed/{subject_id}/{session_date}/features_session_{session_id}_{timestamp}.parquet"
+
+# Model files
+model_file_template: "exports/{track}/{subject_id}/{session_date}/model_session_{session_id}_{timestamp}.{model_artifact_ext}"
+
+# Mirror parquet file into csv or not
+mirror_csv: true
+
+# Notes
+# - Keep these variables in sync with schemas.py defaults.
