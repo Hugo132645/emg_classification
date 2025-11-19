@@ -41,4 +41,3 @@ def window_signal(x, fs, window_ms=200, hop_ms=100, labels=None, timestamps_ms=N
     times_ms = np.array(times_ms).astype(np.float32)
 
     return windows, window_labels, times_ms
-
