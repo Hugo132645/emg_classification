@@ -54,10 +54,10 @@ def samples_to_ms(n: int, fs: int) -> int: #Transform samples to ms
     return int(round(n * 1000 / fs))
 
 def window_len_samples(cfg) -> int: #Transform window length to samples
-    return ms_to_samples(cfg.window_size_ms, cfg.sample_rate_hz)
+    return ms_to_samples(cfg.window_ms, cfg.sample_rate_hz)
 
 def hop_len_samples(cfg) -> int: #Transform hop length to samples
-    return ms_to_samples(cfg.hop_size_ms, cfg.sample_rate_hz)
+    return ms_to_samples(cfg.hop_ms, cfg.sample_rate_hz)
 
 def id_map(cfg) -> dict: #Returns the IDs of the gestures
     return cfg.label_map
@@ -87,15 +87,15 @@ def ensure_parent_dir(path: str) -> None: #Checks if a path exists and if not, c
 def sanity_check_cfg(cfg) -> None: #Verifies if there is anything wrong in the cfg
     if cfg.sample_rate_hz <= 0:
         raise ValueError("sample_rate_hz must be > 0.")
-    if cfg.window_size_ms <= 0 or cfg.hop_size_ms <= 0:
-        raise ValueError("window_size_ms and hop_size_ms must be > 0.")
+    if cfg.window_ms <= 0 or cfg.hop_ms <= 0:
+        raise ValueError("window_ms and hop_ms must be > 0.")
     if not hasattr(cfg, "gestures") or not hasattr(cfg, "label_map"):
         raise ValueError("gestures and label_map must be defined in YAML.")
     if set(cfg.gestures) != set(cfg.label_map.keys()):
         raise ValueError("label_map keys must match gestures exactly.")
 
 def is_raw_mode(cfg) -> bool: #Checks if data is raw
-    if cfg.bandpass_hz is not None and not isinstance(cfg.bandpass_hz, (tuple)):
+    if cfg.bandpass_hz is not None and not isinstance(cfg.bandpass_hz, (tuple, list)):
         raise ValueError("bandpass_hz must be a tuple or None.")
     if cfg.notch_hz is not None and not isinstance(cfg.notch_hz, (int, float)):
         raise ValueError("notch_hz must be a number or None.")
@@ -104,14 +104,17 @@ def is_raw_mode(cfg) -> bool: #Checks if data is raw
 # Test
 if __name__ == "__main__":
     cfg = load_cfg()
+    print("The gestures are:", cfg.gestures)
+    print(cfg.bandpass_hz)
     sanity_check_cfg(cfg)
     print("Sanity check: OK")
     print("is_raw_mode:", is_raw_mode(cfg))
+    print(cfg.hop_ms)
     print("sample_rate:", cfg.sample_rate_hz)
-    print("window/hop (ms):", cfg.window_size_ms, cfg.hop_size_ms)
+    print("window/hop (ms):", cfg.window_ms, cfg.hop_ms)
     print("window/hop (samples):",
-          ms_to_samples(cfg.window_size_ms, cfg.sample_rate_hz),
-          ms_to_samples(cfg.hop_size_ms, cfg.sample_rate_hz))
+          ms_to_samples(cfg.window_ms, cfg.sample_rate_hz),
+          ms_to_samples(cfg.hop_ms, cfg.sample_rate_hz))
     path = expand_template(cfg.features_file_template,
                            subject_id="S01", session_date="2025-11-06",
                            session_id=1, timestamp=int(time()))

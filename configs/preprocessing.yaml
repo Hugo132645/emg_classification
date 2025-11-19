@@ -5,12 +5,12 @@ sample_rate_hz: 1000
 num_channels: 3
 
 # Filtering
-bandpass_hz: None
-notch_hz: None
+bandpass_hz: null
+notch_hz: null
 
 # Windowing
 window_ms: 200
-hop_ms: 100
+hop_ms: 105
 
 # Gestures & labels
 gestures:
