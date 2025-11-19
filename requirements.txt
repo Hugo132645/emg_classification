@@ -9,6 +9,7 @@ numpy>=2.2.6
 pandas>=2.2.3
 #dummy_data.py
 scipy>=1.15.3
+
 #Base requirements
 numpy==1.24.4
 pandas==2.2.2
