@@ -6,6 +6,7 @@ from src.common.preprocessing.windowing import window_signal
 
 EPS = 1e-7
 
+#Helper function for window dimensions
 def _windows_correct(windows: np.ndarray) -> np.array:
     windows = np.asarray(windows)
     if windows.ndim == 1:
@@ -14,6 +15,7 @@ def _windows_correct(windows: np.ndarray) -> np.array:
         return windows
     raise ValueError("Windows should be 1D, or 2D stack of Windows")
 
+#Basic stats function additionally with zero-crossing rate
 def _basic_stats_(windows: np.ndarray) -> Tuple[np.array, list[str]]:
     windows = _windows_correct(windows).astype(np.float64)
     mean = windows.mean(axis=1)
@@ -27,6 +29,7 @@ def _basic_stats_(windows: np.ndarray) -> Tuple[np.array, list[str]]:
     names = ['mean', 'std', 'min', 'max', 'range', 'zero_crossing_rate']
     return feat, names
 
+#Window shape features -> slope, skew, kurtosis
 def _shape_feat_(windows: np.ndarray, fs: float) -> Tuple[np.array, list[str]]:
     windows = _windows_correct(windows).astype(np.float64)
     time_st = windows.shape[1]
@@ -46,6 +49,7 @@ def _shape_feat_(windows: np.ndarray, fs: float) -> Tuple[np.array, list[str]]:
     names = ['slope', 'moment_skew', 'excess_kurtosis']
     return feat.astype(np.float64), names
 
+#Frequency domain analysis -> bandwidth, power
 def _spectral_light_(windows: np.ndarray, fs: float) -> Tuple[np.array, list[str]]:
     windows = _windows_correct(windows).astype(np.float64)
     x = windows - windows.mean(axis=1, keepdims=True)
@@ -62,13 +66,14 @@ def _spectral_light_(windows: np.ndarray, fs: float) -> Tuple[np.array, list[str
     names = ['spec_centroid_hz', 'spec_bandwidth', 'spec_bb_power']
     return feat, names
 
+#Deltas between windows
 def _add_delta_batch_(F: np.ndarray, names: list[str]) -> tuple[np.array, list[str]]:
     diff = np.vstack([np.zeros((1,F.shape[1]), dtype=F.dtype), np.diff(F, axis=0)])
     features_out = np.concatenate([F, diff], axis=1)
     names_out = names + [f"{n}_delta" for n in names]
     return features_out, names
 
-
+#Whole function to compute features -> only non-internal function
 def compute_seq_features(windows: np.ndarray, fs: float,
                          basic_feat: bool = True, shape_feat: bool = True, spectral_feat: bool = False, deltas: bool = False)\
         -> Tuple[np.array, list[str]]:
@@ -90,16 +95,16 @@ def compute_seq_features(windows: np.ndarray, fs: float,
         names += n
 
     if not blocks:
-        raise ValueError("Select at least one feature block (basic/shape/spectral).")
+        raise ValueError("Select at least one feature block -> basic/shape/spectral/deltas.")
 
-    # horizontally stack feature blocks: (N, D_total)
+    # Horizontally stacking feature blocks
     feature_vector_all = np.hstack(blocks).astype(np.float32)
     if deltas:
         feature_vector_all, names = _add_delta_batch_(feature_vector_all, names)
     return feature_vector_all, names
 
 
-
+#Tests
 if __name__ == '__main__':
     num = np.array([1,2,3])
     Gestures = load_cfg().gestures
@@ -110,9 +115,4 @@ if __name__ == '__main__':
     Fvector2, names2 = compute_seq_features(window[0], 1000, basic_feat=True, shape_feat=True, spectral_feat=True)
     print(Fvector2, names2)
     print(Fvector2.shape, names1)
-
-
-
-
-
 
