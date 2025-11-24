@@ -24,7 +24,7 @@ def _basic_stats_(windows: np.ndarray) -> Tuple[np.array, list[str]]:
     max_ = windows.max(axis=1)
     range_ = max_ - min_
     w0 = windows - windows.mean(axis=1, keepdims=True)
-    zero_crossings = (w0[:, 1:] * w0[:,-1:] < 0 ).mean(axis=1)
+    zero_crossings = (w0[:,1:] * w0[:,:-1] < 0 ).mean(axis=1)
     feat = np.stack([mean, std, min_, max_, range_, zero_crossings], axis=1)
     names = ['mean', 'std', 'min', 'max', 'range', 'zero_crossing_rate']
     return feat, names
@@ -36,7 +36,7 @@ def _shape_feat_(windows: np.ndarray, fs: float) -> Tuple[np.array, list[str]]:
 
     #Least Mean-Squares
     t = (np.arange(time_st) / max(1.0, fs))[None, :]
-    t = (t-t.mean() / (t.std() + EPS))
+    t = (t-t.mean()) / (t.std() + EPS)
     x = windows - windows.mean(axis=1, keepdims=True)
     slope = (x*t).sum(axis=1) / ((t**2).sum(axis=1) + EPS)
     s = x.std(axis=1) + EPS
@@ -71,7 +71,7 @@ def _add_delta_batch_(F: np.ndarray, names: list[str]) -> tuple[np.array, list[s
     diff = np.vstack([np.zeros((1,F.shape[1]), dtype=F.dtype), np.diff(F, axis=0)])
     features_out = np.concatenate([F, diff], axis=1)
     names_out = names + [f"{n}_delta" for n in names]
-    return features_out, names
+    return features_out, names_out
 
 #Whole function to compute features -> only non-internal function
 def compute_seq_features(windows: np.ndarray, fs: float,
