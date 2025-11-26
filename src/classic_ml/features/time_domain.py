@@ -8,12 +8,12 @@ import numpy as np
 Delta = 1e-6    #used to avoid counting noise
 EPS   = 1e-12   # to avoid divide-by-zero
 
-# If you later want Hjorth/AR in the feature vector, set these True
+# If you want Hjorth/AR in the feature vector, set these True
 
-use_hjorth = False
-use_ar4 = False   # requires W >= 4
+use_hjorth = True
+use_ar4 = True   # requires W >= 4
 
-# Primitive per-window ops
+# Time features
 
 def _mav(x: np.ndarray) -> float:   #Mean absolute value
     return float(np.mean(np.abs(x)))
@@ -88,7 +88,7 @@ def _ar_coeffs_order4(x: np.ndarray) -> np.ndarray:        #AR4
 
 # Global functions
 
-def feature_names(single_channel: bool = True) -> list[str]:
+def td_feature_names(single_channel: bool = True) -> list[str]:
     base = ["MAV", "RMS", "VAR", "SD", "WL", "ZC", "SSC", "WAMP"]
     if use_hjorth:
         base += ["Hj_Activity", "Hj_Mobility", "Hj_Complexity"]
@@ -119,7 +119,7 @@ def td_features_one_window(win: np.ndarray) -> np.ndarray: #Extracts the feature
         feats.extend(list(_ar_coeffs_order4(win)))
     return np.asarray(feats, dtype=np.float32)
 
-def extract_features_per_window(windows: np.ndarray) -> np.ndarray: #Extracts the features for a given number of windows and channels
+def extract_td_features_per_window(windows: np.ndarray) -> np.ndarray: #Extracts the features for a given number of windows and channels
     win_arr = np.asarray(windows)
     if win_arr.ndim == 2:      # (N, W) number of windows and window length
         feats = [td_features_one_window(win_arr[i]) for i in range(len(win_arr))]
@@ -145,7 +145,7 @@ if __name__ == "__main__":
         x = 0.5*np.sin(2*np.pi*5*t) + 0.05*np.random.randn(W)
         wins.append(x.astype(np.float32))
     wins = np.stack(wins, axis=0)
-    X = extract_features_per_window(wins)
+    X = extract_td_features_per_window(wins)
     print("X shape:", X.shape)
-    print("features:", feature_names())
+    print("features:", td_feature_names())
     print("first row:", X[0])
