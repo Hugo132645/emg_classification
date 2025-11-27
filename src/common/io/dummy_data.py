@@ -16,7 +16,7 @@ def generate_dummy_emg(seconds, fs, classes, block_s=5, mode="raw", seed=None, c
     gesture_values = {
         'fist': {'amp': 1.0, 'freq': 70},
         'open': {'amp': 0.7, 'freq': 55},
-        'closed': {'amp': 0.5, 'freq': 45},
+        'pinch': {'amp': 0.5, 'freq': 45},
         'rest': {'amp': 0.0, 'freq': 10}
     }
 
