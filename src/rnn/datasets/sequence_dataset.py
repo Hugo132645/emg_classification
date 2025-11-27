@@ -119,8 +119,8 @@ if __name__ == "__main__":
     from src.rnn.features.seq_features import compute_seq_features
     from src.common.io.dummy_data import generate_dummy_emg
 
-    cfg = load_cfg()
-    gestures = cfg.gestures
+    config = load_cfg()
+    gestures = config.gestures
     dat, labels_raw, ts = generate_dummy_emg(
         100, 1000, gestures
     )
@@ -170,7 +170,7 @@ if __name__ == "__main__":
     print("  y_seq shape :", sample["y_seq"].shape)  # [L]
     print("  y (id)      :", sample["y"].item())
     try:
-        print("  y (name)    :", id_to_gesture(cfg, int(sample["y"].item())))
+        print("  y (name)    :", id_to_gesture(config, int(sample["y"].item())))
     except KeyError:
         print("  y (name)    : <id not in cfg.label_map>")
 
