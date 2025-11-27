@@ -5,9 +5,8 @@ from torch.utils.data import Dataset, DataLoader
 from dataclasses import dataclass
 from typing import Optional
 
-cfg = load_cfg()
 
-def encode_labels_from_cfg(labels_str: list[str])-> np.ndarray:
+def encode_labels_from_cfg(cfg, labels_str: list[str])-> np.ndarray:
     labels_str = np.asarray(labels_str)
     labels_int = []
     for g in labels_str:
@@ -122,16 +121,14 @@ if __name__ == "__main__":
 
     cfg = load_cfg()
     gestures = cfg.gestures
-
     dat, labels_raw, ts = generate_dummy_emg(
-        100, 1000, gestures, seed=42
+        100, 1000, gestures
     )
     signal = np.asarray(dat['signal'], dtype=np.float32)
     windows, gesture_labels, time_stamps = window_signal(
         signal, 1000,
         timestamps_ms=ts,
         labels=labels_raw
-
     )
 
     feature_v, feat_names = compute_seq_features(
@@ -146,6 +143,7 @@ if __name__ == "__main__":
     print(f"Feature_names: {feat_names}    Feature length: {len(feat_names)}")
 
     lbls_int = encode_labels_from_cfg(gesture_labels)
+    print(lbls_int)
 
     print("First 10 labels (str → id):")
     for i in range(min(10, len(gesture_labels))):
