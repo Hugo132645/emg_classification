@@ -85,3 +85,7 @@ def generate_dummy_emg(seconds, fs, classes, block_s=5, mode="raw", seed=None, c
     signal += noise
     df = pd.DataFrame({'time': time, 'signal': signal, 'label': label})
     return df, interval_labels, timestamps_ms
+
+if __name__ == "__main__":
+    _, lbls, _ = generate_dummy_emg(seconds=1000, fs=1000, classes=["rest", "open", "pinch", "fist"])
+    print(lbls)
