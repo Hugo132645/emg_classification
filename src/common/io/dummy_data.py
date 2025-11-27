@@ -24,7 +24,7 @@ def generate_dummy_emg(seconds, fs, classes, block_s=5, mode="raw", seed=None, c
     signal = np.zeros(num_samples)
     label = np.empty(num_samples, dtype='U10')
     iterator = 0
-    prev_class = 'none'
+    prev_class = 'rest'
 
     interval_labels = []
     timestamps_ms = []

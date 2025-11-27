@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from dataclasses import dataclass
 from typing import Optional
+import inspect
 
 
 def encode_labels_from_cfg(cfg, labels_str: list[str])-> np.ndarray:
@@ -119,6 +120,8 @@ if __name__ == "__main__":
     from src.rnn.features.seq_features import compute_seq_features
     from src.common.io.dummy_data import generate_dummy_emg
 
+    print(inspect.signature(encode_labels_from_cfg))
+
     config = load_cfg()
     gestures = config.gestures
     dat, labels_raw, ts = generate_dummy_emg(
@@ -142,7 +145,7 @@ if __name__ == "__main__":
     print(f"Feature_vector shape: {feature_v.shape}")
     print(f"Feature_names: {feat_names}    Feature length: {len(feat_names)}")
 
-    lbls_int = encode_labels_from_cfg(gesture_labels)
+    lbls_int = encode_labels_from_cfg(config, gesture_labels)
     print(lbls_int)
 
     print("First 10 labels (str → id):")
