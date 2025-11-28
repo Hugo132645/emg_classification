@@ -35,6 +35,7 @@ from src.common.preprocessing.pipelines import (
     preprocess_raw,
     preprocess_envelope,
 )
+from datetime import datetime
 
 # Dummy data flag
 
@@ -260,6 +261,7 @@ def main():
     print(f"window_ms: {cfg.window_ms}, hop_ms: {cfg.hop_ms}")
     print(f"gestures: {cfg.gestures}")
     print(f"use_dummy = {use_dummy}")
+    session_date = datetime.now().strftime("%Y-%m-%d")
     # 2. Build dataset (dummy or real) based on use_dummy
     if use_dummy:
         print("\n[1] Building dataset from DUMMY EMG...")
@@ -356,12 +358,12 @@ def main():
     df_results = df_results.sort_values(by="macro_f1", ascending=False)
     print("\n[5b] Results table:")
     print(df_results)
-    results_path = Path(f"reports/results_table_{timestamp}.csv")
+    results_path = Path(f"reports/{session_date}/results_table_{timestamp}.csv")
     ensure_parent_dir(str(results_path))
     df_results.to_csv(results_path, index=False)
     print("Saved results table to:", results_path)
     # 6c. Bar plot of model scores
-    scores_plot_path = Path(f"reports/model_scores_macro_f1_{timestamp}.png")
+    scores_plot_path = Path(f"reports/{session_date}/model_scores_macro_f1_{timestamp}.png")
     _plot_model_scores_bar(
         df_results,
         metric="macro_f1",
@@ -376,7 +378,7 @@ def main():
     # 8. Plot confusion matrix for best model
     print("\n[7] Plotting confusion matrix for best model...")
     cm_title = f"Confusion matrix - {best_name}"
-    cm_path = Path(f"reports/best/confusion_matrix_{best_name}_{timestamp}.png")
+    cm_path = Path(f"reports/{session_date}/best/confusion_matrix_{best_name}_{timestamp}.png")
     _plot_confusion_matrix(best_cm, class_names, cm_title, cm_path)
     print("Saved confusion matrix to:", cm_path)
     print("\n[7b] Plotting confusion matrices for ALL models...")
@@ -384,24 +386,24 @@ def main():
         y_pred_all = model.predict(X_test)
         cm_all = confusion_matrix(y_test, y_pred_all, labels=class_names)
         cm_title_all = f"Confusion matrix - {name}"
-        cm_path_all = Path(f"reports/confusion_matrix_{name}_{timestamp}.png")
+        cm_path_all = Path(f"reports/{session_date}/confusion_matrix_{name}_{timestamp}.png")
         _plot_confusion_matrix(cm_all, class_names, cm_title_all, cm_path_all)
         print("Saved confusion matrix for", name, "to:", cm_path_all)
     if "rf" in models:
         from src.classic_ml.features.time_domain import td_feature_names
         from src.classic_ml.features.freq_domain import feature_names_freq
         feature_names = td_feature_names() + feature_names_freq()
-        fi_path = Path(f"reports/feature_importance_rf_{timestamp}.png")
+        fi_path = Path(f"reports/{session_date}/feature_importance_rf_{timestamp}.png")
         print("\n[7c] Plotting Random Forest feature importance...")
         _plot_rf_feature_importance(models["rf"], feature_names, fi_path)
         print("Saved RF feature importance to:", fi_path)
     print("\n[7d] Plotting per-class F1 scores...")
     y_pred_best = best_model.predict(X_test)
-    f1_path = Path(f"reports/per_class_f1_{timestamp}.png")
+    f1_path = Path(f"reports/{session_date}/per_class_f1_{timestamp}.png")
     _plot_per_class_f1(y_test, y_pred_best, class_names, f1_path)
     print("Saved per-class F1 plot to:", f1_path)
     print("\n[7e] Plotting PCA 2D feature space...")
-    pca_path = Path(f"reports/pca_2d_{timestamp}.png") 
+    pca_path = Path(f"reports/{session_date}/pca_2d_{timestamp}.png") 
     _plot_pca_2d(X, y, class_names, pca_path)
     print("Saved PCA 2D plot to:", pca_path)
     # 9. Save best model + scaler + run metadata using model_file_template
@@ -410,7 +412,7 @@ def main():
         cfg.model_file_template,
         track="classic_ml",
         subject_id="DUMMY" if use_dummy else "REAL",
-        session_date="0000-00-00",
+        session_date = datetime.now().strftime("%Y-%m-%d"),
         session_id=0,
         timestamp=timestamp,
         model_artifact_ext="joblib",
