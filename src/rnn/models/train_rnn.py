@@ -3,14 +3,17 @@ import numpy as np
 import torch
 import torch.nn as nn
 from src.rnn.models.model_rnn import GRUModel, LSTMModel
-from src.common.io.schemas import load_cfg, gesture_to_id
+from src.common.io.schemas import load_cfg, gesture_to_id, expand_template, ensure_parent_dir
 from src.rnn.datasets.sequence_dataset import Standardizer, FeatureSequenceDataset, encode_labels_from_cfg
 from src.rnn.features.seq_features import compute_seq_features
 from src.common.io.dummy_data import generate_dummy_emg
 from torch.utils.data import DataLoader
 from src.common.preprocessing.windowing import window_signal
 import matplotlib.pyplot as plt
+import os
+from datetime import datetime
 
+#Loading config, seed, device
 config = load_cfg()
 sd = 42
 dvc = torch.device("mps" if torch.backends.mps.is_available()
@@ -24,12 +27,17 @@ def make_dataloaders(
         torch.manual_seed(seed)
         np.random.seed(seed)
     sample_rate = cfg.sample_rate_hz
+
+    #Generating dummy_data
     dat, raw_labels, timestamps = generate_dummy_emg(seconds, sample_rate, cfg.gestures, block_s=5, seed=seed)
+
+    #Windowing dummy_data
     windows, raw_labels, timestamps = window_signal(dat['signal'], sample_rate,
                                                     labels=raw_labels, timestamps_ms=timestamps, window_ms=cfg.window_ms, hop_ms=cfg.hop_ms)
     ft_vectors, ft_names = compute_seq_features(windows, sample_rate, spectral_feat=True)
     labels_int = encode_labels_from_cfg(cfg, raw_labels)
 
+    #Creating a Standardizer
     std = Standardizer()
     dataset = FeatureSequenceDataset(
         feature_vectors=ft_vectors,
@@ -47,9 +55,11 @@ def make_dataloaders(
     val_idxs = indices[:n_val]
     train_idxs = indices[n_val:]
 
+    #Dividing into training and validation dataset
     train_dataset = torch.utils.data.Subset(dataset, train_idxs)
     vals_dataset = torch.utils.data.Subset(dataset, val_idxs)
 
+    #Collation into torch.tensors for training and validation
     def collate_fn(batch):
         return {
             "x": torch.stack([b["x"] for b in batch], dim=0),          # [B, L, D]
@@ -79,6 +89,7 @@ def make_dataloaders(
 
 
 def run_epoch(loader, model, optimizer=None, device="mps"):
+    #Running 1 epoch -> one-time training dataset
     if optimizer is None:
         model.eval()
     else:
@@ -88,6 +99,8 @@ def run_epoch(loader, model, optimizer=None, device="mps"):
     total = 0
 
     criterion = nn.CrossEntropyLoss()
+
+    #Differentiating running epoch between training/validation data -> val not calculating gradient
     context = torch.no_grad() if optimizer is None else torch.enable_grad()
     with context:
         for batch in loader:
@@ -115,6 +128,7 @@ def run_epoch(loader, model, optimizer=None, device="mps"):
     return avg_loss, accuracy
 
 if __name__ == "__main__":
+    #Testing
     sd = 1
     config = load_cfg()
     train_loader, val_loader, input_dim, num_classes, ft_names, std = make_dataloaders(
@@ -159,11 +173,11 @@ if __name__ == "__main__":
         GRU_val_acc_log.append(val_accuracy)
     count = list(range(1, epochs + 1))
 
+    #Loading only best model state
     if best_state is not None:
         gru_model.load_state_dict(best_state)
 
-    model_path = None
-
+    #Saving artifact
     artifact = {
         "state_dict": gru_model.state_dict(),
         "model_type": "gru",
@@ -177,12 +191,23 @@ if __name__ == "__main__":
         "standardizer_mean": std.mean_,
         "standardizer_std": std.std_,
     }
+
+    #Saving model
+    timestamp = datetime.now().strftime("%Y-%m-%d")
+    model_path = expand_template("./artifacts/{model_type}_{timestamp}.pt",
+                                 model_type='gru',
+                                 timestamp=timestamp)
+    ensure_parent_dir(model_path)
+
     torch.save(artifact, model_path)
     print("Model saved to {}".format(model_path))
 
+    #Simple plot -> training vs validation data accuracy
     plt.plot(count, GRU_val_acc_log, label="value accuracy", color="red")
     plt.plot(count, GRU_train_acc_log, label="train accuracy", color="green")
     plt.xlabel("epoch")
     plt.ylabel("accuracy")
     plt.legend()
     plt.show()
+
+

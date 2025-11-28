@@ -3,7 +3,9 @@ import torch.nn as nn
 
 from typing import Literal, Optional
 
+#GRU model class with PyTorch
 class GRUModel(nn.Module):
+    #Initialization of hyperparameters
     def __init__(
             self,
             input_dim: int,
@@ -30,6 +32,7 @@ class GRUModel(nn.Module):
         output_dim = hidden_dim * (2 if bidirectional else 1)
         self.fc = nn.Linear(output_dim, num_classes)
 
+    #Defining forward pass
     def forward(self, x: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
         out, hidden = self.gru(x)
 
@@ -43,7 +46,9 @@ class GRUModel(nn.Module):
         logits = self.fc(last)
         return logits
 
+#LSTM model class with PyTorch
 class LSTMModel(nn.Module):
+    #Initialization of hyperparameters
     def __init__(
             self,
             input_dim: int,
@@ -70,6 +75,7 @@ class LSTMModel(nn.Module):
         output_dim = hidden_dim * (2 if bidirectional else 1)
         self.fc = nn.Linear(output_dim, num_classes)
 
+    #Forward pass for LSTM
     def forward(self, x: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
         out, hidden = self.lstm(x)
 
