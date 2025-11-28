@@ -376,7 +376,7 @@ def main():
     # 8. Plot confusion matrix for best model
     print("\n[7] Plotting confusion matrix for best model...")
     cm_title = f"Confusion matrix - {best_name}"
-    cm_path = Path(f"reports/confusion_matrix_{best_name}_{timestamp}.png")
+    cm_path = Path(f"reports/best/confusion_matrix_{best_name}_{timestamp}.png")
     _plot_confusion_matrix(best_cm, class_names, cm_title, cm_path)
     print("Saved confusion matrix to:", cm_path)
     print("\n[7b] Plotting confusion matrices for ALL models...")
