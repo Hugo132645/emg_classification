@@ -13,7 +13,8 @@ Mode = Literal["time", "freq", "time+freq"]
 
 # Features extraction
 
-def _extract_features(windows: np.ndarray,  fs: float, mode: Mode) -> np.ndarray:
+
+def _extract_features(windows: np.ndarray, fs: float, mode: Mode) -> np.ndarray:
     if mode == "time":
         X = td.extract_td_features_per_window(windows)
     elif mode == "freq":
@@ -26,9 +27,17 @@ def _extract_features(windows: np.ndarray,  fs: float, mode: Mode) -> np.ndarray
         raise ValueError(f"Unknown mode: {mode}")
     return X
 
+
 # Data set builder
 
-def build_classic_ml_dataset(windows: np.ndarray, window_labels, fs: float, mode: Mode = "time+freq", scale: bool = True) -> Tuple[np.ndarray, np.ndarray, StandardScaler | None]:
+
+def build_classic_ml_dataset(
+    windows: np.ndarray,
+    window_labels,
+    fs: float,
+    mode: Mode = "time+freq",
+    scale: bool = True,
+) -> Tuple[np.ndarray, np.ndarray, StandardScaler | None]:
     win_arr = np.asarray(windows)
     labels_arr = np.asarray(window_labels, dtype=object)
     # Drop windows with no label (None)
@@ -46,6 +55,7 @@ def build_classic_ml_dataset(windows: np.ndarray, window_labels, fs: float, mode
     else:
         scaler = None
     return X, y, scaler
+
 
 # Test
 

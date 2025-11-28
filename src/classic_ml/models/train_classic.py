@@ -19,7 +19,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.decomposition import PCA       # >>> ADDED
+from sklearn.decomposition import PCA  # >>> ADDED
 import joblib
 from src.common.io.schemas import (
     load_cfg,
@@ -42,6 +42,7 @@ from datetime import datetime
 use_dummy = True  # set to False for real EMG
 
 # Confusion matrix ploted
+
 
 def _plot_confusion_matrix(
     cm: np.ndarray,
@@ -79,7 +80,9 @@ def _plot_confusion_matrix(
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
 
+
 # Simple bar plot for model metrics
+
 
 def _plot_model_scores_bar(
     df_results: pd.DataFrame,
@@ -97,7 +100,9 @@ def _plot_model_scores_bar(
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
 
+
 # Random forest feature importance graph
+
 
 def _plot_rf_feature_importance(rf_model, feature_names, out_path: Path):
     importances = rf_model.feature_importances_
@@ -115,7 +120,9 @@ def _plot_rf_feature_importance(rf_model, feature_names, out_path: Path):
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
 
+
 # PPer-clas F1 bar plot
+
 
 def _plot_per_class_f1(y_true, y_pred, class_names, out_path: Path):
     f1_vals = f1_score(y_true, y_pred, average=None, labels=class_names)
@@ -128,7 +135,9 @@ def _plot_per_class_f1(y_true, y_pred, class_names, out_path: Path):
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
 
+
 # PCA 2D plot
+
 
 def _plot_pca_2d(X, y, class_names, out_path: Path):
     pca = PCA(n_components=2)
@@ -147,7 +156,9 @@ def _plot_pca_2d(X, y, class_names, out_path: Path):
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
 
+
 # Latency estimation
+
 
 def _estimate_latency_ms(model, X: np.ndarray, n_reps: int = 100) -> float:
     if X.shape[0] == 0:
@@ -160,7 +171,9 @@ def _estimate_latency_ms(model, X: np.ndarray, n_reps: int = 100) -> float:
     avg_s = (end - start) / n_reps
     return avg_s * 1000.0
 
+
 # Dummy dataset build
+
 
 def _build_dummy_dataset(cfg):
     fs = cfg.sample_rate_hz
@@ -190,7 +203,9 @@ def _build_dummy_dataset(cfg):
     )
     return X, y, scaler
 
+
 # Real dataset build when needed
+
 
 def _build_real_dataset(cfg):
     fs = cfg.sample_rate_hz
@@ -250,7 +265,9 @@ def _build_real_dataset(cfg):
     )
     return X, y, scaler
 
+
 # All models training and evaluation, comparison and output best model with data
+
 
 def main():
     # 1. Load and sanity check configuration
@@ -262,6 +279,7 @@ def main():
     print(f"gestures: {cfg.gestures}")
     print(f"use_dummy = {use_dummy}")
     session_date = datetime.now().strftime("%Y-%m-%d")
+
     # 2. Build dataset (dummy or real) based on use_dummy
     if use_dummy:
         print("\n[1] Building dataset from DUMMY EMG...")
@@ -271,6 +289,7 @@ def main():
         X, y, scaler = _build_real_dataset(cfg)
     print("X shape:", X.shape)
     print("y shape:", y.shape)
+
     # 3. Train-test split
     print("\n[2] Splitting into train and test sets...")
     X_train, X_test, y_train, y_test = train_test_split(
@@ -281,6 +300,7 @@ def main():
         stratify=y,
     )
     print("Train size:", X_train.shape[0], "Test size:", X_test.shape[0])
+
     # 4. Define candidate models
     print("\n[3] Defining models...")
     models = {
@@ -312,6 +332,7 @@ def main():
     best_macro_f1 = -1.0
     best_cm: np.ndarray | None = None
     class_names = sorted(np.unique(y_train))
+
     # 5. Train and evaluate each model
     print("\n[4] Training and evaluating models...")
     for name, model in models.items():
@@ -323,6 +344,7 @@ def main():
         precision = precision_score(y_test, y_pred, average="macro")
         recall = recall_score(y_test, y_pred, average="macro")
         cm = confusion_matrix(y_test, y_pred, labels=class_names)
+
         print("Accuracy:", acc)
         print("Macro-F1:", macro_f1)
         print("Precision (macro):", precision)
@@ -345,6 +367,7 @@ def main():
             best_name = name
             best_model = model
             best_cm = cm
+
     # 6. Print a simple summary table
     print("\n[5] Summary of model scores:")
     print(f"{'Model':<12} {'Accuracy':>10} {'Macro-F1':>10}")
@@ -352,6 +375,7 @@ def main():
     for r in results:
         print(f"{r['name']:<12} {r['accuracy']:>10.3f} {r['macro_f1']:>10.3f}")
     print(f"\nBest model: {best_name} (macro-F1 = {best_macro_f1:.3f})")
+
     # 6b. Build and save a DataFrame of results
     timestamp = int(time())
     df_results = pd.DataFrame(results)
@@ -362,8 +386,11 @@ def main():
     ensure_parent_dir(str(results_path))
     df_results.to_csv(results_path, index=False)
     print("Saved results table to:", results_path)
+
     # 6c. Bar plot of model scores
-    scores_plot_path = Path(f"reports/{session_date}/model_scores_macro_f1_{timestamp}.png")
+    scores_plot_path = Path(
+        f"reports/{session_date}/model_scores_macro_f1_{timestamp}.png"
+    )
     _plot_model_scores_bar(
         df_results,
         metric="macro_f1",
@@ -371,54 +398,67 @@ def main():
         title="Model comparison (Macro-F1)",
     )
     print("Saved model scores plot to:", scores_plot_path)
+
     # 7. Latency estimate for the best model
     print("\n[6] Estimating latency for best model...")
     latency_ms = _estimate_latency_ms(best_model, X_test, n_reps=200)
     print(f"Estimated model.predict latency per window: {latency_ms:.4f} ms")
+
     # 8. Plot confusion matrix for best model
     print("\n[7] Plotting confusion matrix for best model...")
     cm_title = f"Confusion matrix - {best_name}"
-    cm_path = Path(f"reports/{session_date}/best/confusion_matrix_{best_name}_{timestamp}.png")
+    cm_path = Path(
+        f"reports/{session_date}/best/confusion_matrix_{best_name}_{timestamp}.png"
+    )
     _plot_confusion_matrix(best_cm, class_names, cm_title, cm_path)
     print("Saved confusion matrix to:", cm_path)
+
     print("\n[7b] Plotting confusion matrices for ALL models...")
     for name, model in models.items():
         y_pred_all = model.predict(X_test)
         cm_all = confusion_matrix(y_test, y_pred_all, labels=class_names)
         cm_title_all = f"Confusion matrix - {name}"
-        cm_path_all = Path(f"reports/{session_date}/confusion_matrix_{name}_{timestamp}.png")
+        cm_path_all = Path(
+            f"reports/{session_date}/confusion_matrix_{name}_{timestamp}.png"
+        )
         _plot_confusion_matrix(cm_all, class_names, cm_title_all, cm_path_all)
         print("Saved confusion matrix for", name, "to:", cm_path_all)
+
     if "rf" in models:
         from src.classic_ml.features.time_domain import td_feature_names
         from src.classic_ml.features.freq_domain import feature_names_freq
+
         feature_names = td_feature_names() + feature_names_freq()
         fi_path = Path(f"reports/{session_date}/feature_importance_rf_{timestamp}.png")
         print("\n[7c] Plotting Random Forest feature importance...")
         _plot_rf_feature_importance(models["rf"], feature_names, fi_path)
         print("Saved RF feature importance to:", fi_path)
+
     print("\n[7d] Plotting per-class F1 scores...")
     y_pred_best = best_model.predict(X_test)
     f1_path = Path(f"reports/{session_date}/per_class_f1_{timestamp}.png")
     _plot_per_class_f1(y_test, y_pred_best, class_names, f1_path)
     print("Saved per-class F1 plot to:", f1_path)
+
     print("\n[7e] Plotting PCA 2D feature space...")
-    pca_path = Path(f"reports/{session_date}/pca_2d_{timestamp}.png") 
+    pca_path = Path(f"reports/{session_date}/pca_2d_{timestamp}.png")
     _plot_pca_2d(X, y, class_names, pca_path)
     print("Saved PCA 2D plot to:", pca_path)
+
     # 9. Save best model + scaler + run metadata using model_file_template
     print("\n[8] Saving model artifact...")
     model_artifact_path_str = expand_template(
         cfg.model_file_template,
-        track="classic_ml",
+        track="classic_ml_best",
         subject_id="DUMMY" if use_dummy else "REAL",
-        session_date = datetime.now().strftime("%Y-%m-%d"),
+        session_date=datetime.now().strftime("%Y-%m-%d"),
         session_id=0,
         timestamp=timestamp,
         model_artifact_ext="joblib",
     )
     model_artifact_path = Path(model_artifact_path_str)
     ensure_parent_dir(str(model_artifact_path))
+
     artifact = {
         "model_name": best_name,
         "model": best_model,
@@ -431,7 +471,19 @@ def main():
     }
     joblib.dump(artifact, model_artifact_path)
     print("Saved BEST model artifact to:", model_artifact_path)
+
     # 9b. Save ALL trained models as separate artifacts
+    model_artifact_path_str = expand_template(
+        cfg.model_file_template,
+        track="classic_ml",
+        subject_id="DUMMY" if use_dummy else "REAL",
+        session_date=datetime.now().strftime("%Y-%m-%d"),
+        session_id=0,
+        timestamp=timestamp,
+        model_artifact_ext="joblib",
+    )
+    model_artifact_path = Path(model_artifact_path_str)
+
     all_model_artifacts: dict[str, str] = {}
     for name, model in models.items():
         per_model_path = model_artifact_path.with_name(
@@ -451,7 +503,18 @@ def main():
         joblib.dump(per_artifact, per_model_path)
         all_model_artifacts[name] = str(per_model_path)
     print("Saved ALL model artifacts:", all_model_artifacts)
+
     # 10. Save a simple run.json next to the model
+    model_artifact_path_str = expand_template(
+        cfg.model_file_template,
+        track="classic_ml_best",
+        subject_id="DUMMY" if use_dummy else "REAL",
+        session_date=datetime.now().strftime("%Y-%m-%d"),
+        session_id=0,
+        timestamp=timestamp,
+        model_artifact_ext="joblib",
+    )
+    model_artifact_path = Path(model_artifact_path_str)
     run_info = {
         "model_artifact": str(model_artifact_path),
         "best_model_name": best_name,
@@ -469,6 +532,7 @@ def main():
     with open(run_json_path, "w", encoding="utf-8") as f:
         json.dump(run_info, f, indent=2)
     print("Saved run metadata to:", run_json_path)
+
 
 if __name__ == "__main__":
     main()
