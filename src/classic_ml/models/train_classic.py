@@ -19,7 +19,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.decomposition import PCA  # >>> ADDED
+from sklearn.decomposition import PCA
 import joblib
 from src.common.io.schemas import (
     load_cfg,
@@ -36,6 +36,7 @@ from src.common.preprocessing.pipelines import (
     preprocess_envelope,
 )
 from datetime import datetime
+from xgboost import XGBClassifier
 
 # Dummy data flag
 
@@ -119,6 +120,25 @@ def _plot_rf_feature_importance(rf_model, feature_names, out_path: Path):
     ensure_parent_dir(str(out_path))
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
+
+
+# XGBoost feature importance plot
+
+
+def _plot_xgb_feature_importance(xgb_model, feature_names, out_path: Path):
+    """Plot XGBoost feature importance using gain."""
+    from xgboost import plot_importance
+
+    plt.figure(figsize=(8, 6))
+    plot_importance(
+        xgb_model,
+        importance_type="gain",
+        max_num_features=20,
+    )
+    plt.title("XGBoost Feature Importance (gain)")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150)
+    plt.close()
 
 
 # PPer-clas F1 bar plot
@@ -220,10 +240,7 @@ def _build_real_dataset(cfg):
     )
     raw_path = Path(raw_path_str)
     if not raw_path.exists():
-        raise FileNotFoundError(
-            f"Real EMG file not found at {raw_path}. "
-            "Create a parquet file matching the README schema or change subject/date/session."
-        )
+        raise FileNotFoundError(f"Real EMG file not found at {raw_path}. ")
     df = pd.read_parquet(raw_path)
     # Decide which column to use based on config (raw vs envelope mode)
     if is_raw_mode(cfg):
@@ -325,6 +342,16 @@ def main():
             max_depth=None,
             random_state=0,
         ),
+        # "xgboost": XGBClassifier(     XGBoost does not work with strings as labels.
+        #     n_estimators=300,
+        #     max_depth=4,
+        #     learning_rate=0.1,
+        #     subsample=0.9,
+        #     colsample_bytree=0.9,
+        #     tree_method="hist",
+        #     eval_metric="mlogloss",
+        #     n_jobs=-1,
+        # ),
     }
     results: list[dict] = []
     best_name: str | None = None
@@ -382,14 +409,14 @@ def main():
     df_results = df_results.sort_values(by="macro_f1", ascending=False)
     print("\n[5b] Results table:")
     print(df_results)
-    results_path = Path(f"reports/{session_date}/results_table_{timestamp}.csv")
+    results_path = Path(f"reports/{session_date}/best/results_table_{timestamp}.csv")
     ensure_parent_dir(str(results_path))
     df_results.to_csv(results_path, index=False)
     print("Saved results table to:", results_path)
 
     # 6c. Bar plot of model scores
     scores_plot_path = Path(
-        f"reports/{session_date}/model_scores_macro_f1_{timestamp}.png"
+        f"reports/{session_date}/rest/model_scores_macro_f1_{timestamp}.png"
     )
     _plot_model_scores_bar(
         df_results,
@@ -419,7 +446,7 @@ def main():
         cm_all = confusion_matrix(y_test, y_pred_all, labels=class_names)
         cm_title_all = f"Confusion matrix - {name}"
         cm_path_all = Path(
-            f"reports/{session_date}/confusion_matrix_{name}_{timestamp}.png"
+            f"reports/{session_date}/rest/confusion_matrix_{name}_{timestamp}.png"
         )
         _plot_confusion_matrix(cm_all, class_names, cm_title_all, cm_path_all)
         print("Saved confusion matrix for", name, "to:", cm_path_all)
@@ -429,19 +456,30 @@ def main():
         from src.classic_ml.features.freq_domain import feature_names_freq
 
         feature_names = td_feature_names() + feature_names_freq()
-        fi_path = Path(f"reports/{session_date}/feature_importance_rf_{timestamp}.png")
+        fi_path = Path(
+            f"reports/{session_date}/rest/feature_importance_rf_{timestamp}.png"
+        )
         print("\n[7c] Plotting Random Forest feature importance...")
         _plot_rf_feature_importance(models["rf"], feature_names, fi_path)
         print("Saved RF feature importance to:", fi_path)
 
-    print("\n[7d] Plotting per-class F1 scores...")
+    # XGBoost feature importance
+    if "xgboost" in models:
+        fi_xgb_path = (
+            model_artifact_path.parent / f"feature_importance_xgb_gain_{timestamp}.png"
+        )
+        print("\n[7d] Plotting XGBoost feature importance...")
+        _plot_xgb_feature_importance(models["xgboost"], feature_names, fi_xgb_path)
+        print("Saved XGBoost feature importance to:", fi_xgb_path)
+
+    print("\n[7e] Plotting per-class F1 scores...")
     y_pred_best = best_model.predict(X_test)
-    f1_path = Path(f"reports/{session_date}/per_class_f1_{timestamp}.png")
+    f1_path = Path(f"reports/{session_date}/best/per_class_f1_{timestamp}.png")
     _plot_per_class_f1(y_test, y_pred_best, class_names, f1_path)
     print("Saved per-class F1 plot to:", f1_path)
 
-    print("\n[7e] Plotting PCA 2D feature space...")
-    pca_path = Path(f"reports/{session_date}/pca_2d_{timestamp}.png")
+    print("\n[7f] Plotting PCA 2D feature space...")
+    pca_path = Path(f"reports/{session_date}/best/pca_2d_{timestamp}.png")
     _plot_pca_2d(X, y, class_names, pca_path)
     print("Saved PCA 2D plot to:", pca_path)
 

@@ -24,3 +24,6 @@ onnx==1.16.0
 onnxruntime==1.18.0
 tqdm==4.66.4
 pyyaml==6.0.2
+
+# Classic ML extra
+xgboost==3.1.2
