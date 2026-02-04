@@ -2,6 +2,8 @@
 import numpy as np
 import torch
 import torch.nn as nn
+from torch import device
+
 from src.rnn.models.model_rnn import GRUModel, LSTMModel
 from src.common.io.schemas import load_cfg, gesture_to_id, expand_template, ensure_parent_dir
 from src.rnn.datasets.sequence_dataset import Standardizer, FeatureSequenceDataset, encode_labels_from_cfg
@@ -19,9 +21,35 @@ sd = 42
 dvc = torch.device("mps" if torch.backends.mps.is_available()
                       else ("cuda" if torch.cuda.is_available() else "cpu"))
 
+def compute_confusion_matrix(y_true, y_pred, num_classes):
+    cm = torch.zeros(num_classes, num_classes, dtype=torch.int64)
+    for t, p in zip(y_true, y_pred):
+        cm[t,p] += 1
+    return cm
+
+def get_targets_preds(loader, model, device):
+    model.eval()
+    all_preds = []
+    all_targets = []
+    with torch.no_grad():
+        for batch in loader:
+            x = batch['x'].to(device)
+            y = batch['y'].to(device)
+            lengths = batch['length'].to(device)
+
+            logits = model(x, lengths)
+            preds = torch.argmax(logits, dim=-1)
+
+            all_preds.append(preds.detach().cpu())
+            all_targets.append(y.detach().cpu())
+
+        all_preds = torch.cat(all_preds, dim=0).numpy()
+        all_targets = torch.cat(all_targets, dim=0).numpy()
+        return all_targets, all_preds
+
 def make_dataloaders(
         cfg, seconds: int = 100, batch_size: int = 32, seq_length: int = 32,
-        seq_stride: int = 8, val_ratio: float = 0.4, seed: int = None
+        seq_stride: int = 8, val_ratio: float = 0.3, seed: int = None
 ):
     if seed is not None:
         torch.manual_seed(seed)
@@ -177,6 +205,10 @@ if __name__ == "__main__":
     if best_state is not None:
         gru_model.load_state_dict(best_state)
 
+    y_true, y_pred = get_targets_preds(val_loader, gru_model, dvc)
+    cm = compute_confusion_matrix(torch.from_numpy(y_true), torch.from_numpy(y_pred), num_classes=num_classes).numpy()
+
+
     #Saving artifact
     artifact = {
         "state_dict": gru_model.state_dict(),
@@ -202,12 +234,41 @@ if __name__ == "__main__":
     torch.save(artifact, model_path)
     print("Model saved to {}".format(model_path))
 
-    #Simple plot -> training vs validation data accuracy
-    plt.plot(count, GRU_val_acc_log, label="value accuracy", color="red")
-    plt.plot(count, GRU_train_acc_log, label="train accuracy", color="green")
-    plt.xlabel("epoch")
-    plt.ylabel("accuracy")
-    plt.legend()
+    count = list(range(1, epochs + 1))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+    ax1.plot(count, GRU_train_loss_log, label="train loss")
+    ax1.plot(count, GRU_val_loss_log, label="val loss")
+    ax1.set_xlabel("epoch")
+    ax1.set_ylabel("loss")
+    ax1.set_title("Training vs Validation Loss")
+    ax1.legend()
+
+    im = ax2.imshow(cm, interpolation="nearest")
+    ax2.set_title("Confusion Matrix (validation)")
+    ax2.set_xlabel("Predicted label")
+    ax2.set_ylabel("True label")
+
+    ax2.set_xticks(np.arange(num_classes))
+    ax2.set_yticks(np.arange(num_classes))
+    ax2.set_xticklabels(config.gestures, rotation=45, ha="right")
+    ax2.set_yticklabels(config.gestures)
+
+    plt.colorbar(im, ax=ax2)
+
+    for i in range(num_classes):
+        for j in range(num_classes):
+            value = cm[i, j]
+            ax2.text(
+                j, i,
+                str(value),
+                ha="center", va="center",
+                color="black" if value > cm.max() / 2.0 else "white",
+                fontsize=8,
+            )
+
+    plt.tight_layout()
     plt.show()
 
 

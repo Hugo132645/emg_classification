@@ -87,5 +87,8 @@ def generate_dummy_emg(seconds, fs, classes, block_s=5, mode="raw", seed=None, c
     return df, interval_labels, timestamps_ms
 
 if __name__ == "__main__":
-    _, lbls, _ = generate_dummy_emg(seconds=1000, fs=1000, classes=["rest", "open", "pinch", "fist"])
-    print(lbls)
+    import matplotlib.pyplot as plt
+    signl, lbls, _ = generate_dummy_emg(seconds=1000, fs=1000, classes=["rest", "open", "pinch", "fist"])
+    x_time = np.linspace(0, 1000, 1000*1000, dtype=np.float64)
+    plt.plot(x_time, signl['signal'])
+    plt.show()
