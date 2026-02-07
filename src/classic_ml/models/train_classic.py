@@ -126,7 +126,6 @@ def _plot_rf_feature_importance(rf_model, feature_names, out_path: Path):
 
 
 def _plot_xgb_feature_importance(xgb_model, feature_names, out_path: Path):
-    """Plot XGBoost feature importance using gain."""
     from xgboost import plot_importance
 
     plt.figure(figsize=(8, 6))
