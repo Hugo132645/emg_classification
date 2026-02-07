@@ -1,0 +1,13 @@
+#OUTPUT
+reports/
+exports/
+
+# FILE TYPES GENERATED DURING TRAINING
+*.joblib
+*.json
+*.csv
+*.png
+
+# PYTHON COMPILED FILES
+__pycache__/
+*.pyc

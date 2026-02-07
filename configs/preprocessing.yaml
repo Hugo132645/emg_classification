@@ -10,7 +10,7 @@ notch_hz: null
 
 # Windowing
 window_ms: 200
-hop_ms: 105
+hop_ms: 100
 
 # Gestures & labels
 gestures:
