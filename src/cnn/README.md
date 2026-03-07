@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully implemented three CNN components for EMG gesture classification using spectrograms:
+Implemented three CNN components for EMG gesture classification using spectrograms:
 
 1. **[cnn_dataset.py](datasets/cnn_dataset.py)** - PyTorch Dataset wrapper (307 lines)
 2. **[model_cnn.py](models/model_cnn.py)** - Lightweight ConvNet architecture (~150K parameters)
@@ -170,19 +170,19 @@ pinch       [ 2    0    11    18]]
 ```bash
 python -c "from src.cnn.datasets.cnn_dataset import SpectrogramDataset; print('Dataset imports successfully')"
 ```
-✅ **Result**: Imports without errors
+ **Result**: Imports without errors
 
 ### 2. Model Forward Pass Test
 ```bash
 python -c "from src.cnn.models.model_cnn import EMGConvNet; import torch; model = EMGConvNet(4); x = torch.randn(2, 1, 64, 2); y = model(x); print(f'Model forward pass: {x.shape} -> {y.shape}')"
 ```
-✅ **Result**: `Model forward pass: torch.Size([2, 1, 64, 2]) -> torch.Size([2, 4])`
+ **Result**: `Model forward pass: torch.Size([2, 1, 64, 2]) -> torch.Size([2, 4])`
 
 ### 3. Full Training Run
 ```bash
 python src/cnn/models/train_cnn_dummy.py
 ```
-✅ **Result**: Training completed successfully with 83.33% best val accuracy
+ **Result**: Training completed successfully with 83.33% best val accuracy
 
 ---
 
@@ -335,8 +335,9 @@ torch.onnx.export(
 
 ## Summary
 
-✅ All components tested and verified  
-✅ 83% validation accuracy on CPU training  
-✅ ~5 second training time  
-✅ Model parameters: 155,908 (~0.6 MB)  
-✅ Production-ready for real EMG data
+ All components tested and verified  
+ 83% validation accuracy on CPU training  
+ ~5 second training time  
+ Model parameters: 155,908 (~0.6 MB)  
+ Production-ready for real EMG data
+
