@@ -45,7 +45,7 @@ Bandpower 20–150 Hz \
 Bandpower 150–350 Hz \
 Mean frequency \
 Median frequency \
-Spectral entropy \
+Spectral entropy 
 
 ## Default mode:
 
@@ -59,7 +59,7 @@ Confusion matrices of all models \
 Model comparison bar chart (macro-F1) \
 Random Forest feature-importance plot \
 Per-class F1 bar plot \
-PCA 2D feature-space visualization \
+PCA 2D feature-space visualization 
 
 ##Output Artifacts
 
@@ -71,7 +71,7 @@ Scaler \
 run.json metadata \
 Per-model artifacts (one file per classifier) \
 All plots (PNG) \
-Results table (.csv) \
+Results table (.csv) 
 
 ## How to Run
 
@@ -96,4 +96,4 @@ Precision (macro) \
 Recall (macro) \
 Per-class F1 \
 Latency (ms) \
-Confusion matrices \
+Confusion matrices
