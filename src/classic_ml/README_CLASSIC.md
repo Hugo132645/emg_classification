@@ -52,7 +52,7 @@ Spectral entropy
 time+freq — concatenation of both sets.
 Visualizations (Auto-Generated)
 
-##The training script saves the following plots in reports/:
+## The training script saves the following plots in reports/:
 
 Confusion matrix of the best model \
 Confusion matrices of all models \
@@ -61,7 +61,7 @@ Random Forest feature-importance plot \
 Per-class F1 bar plot \
 PCA 2D feature-space visualization 
 
-##Output Artifacts
+## Output Artifacts
 
 Saved under:
 exports/classic_ml/{subject}/{date}/
