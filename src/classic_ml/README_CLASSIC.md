@@ -29,23 +29,23 @@ Save all artifacts and metadata.
 
 ## Features:
 
-Time-domain
-MAV
-RMS
-VAR
-SD
-Waveform Length
-Zero Crossings
-Slope Sign Changes
-Willison Amplitude
-Hjorth Activity / Mobility / Complexity
-AR(4) coefficients
-Frequency-domain (Welch PSD)
-Bandpower 20–150 Hz
-Bandpower 150–350 Hz
-Mean frequency
-Median frequency
-Spectral entropy
+Time-domain: \
+MAV \
+RMS \
+VAR \
+SD \
+Waveform Length \
+Zero Crossings \
+Slope Sign Changes \
+Willison Amplitude \
+Hjorth Activity / Mobility / Complexity \
+AR(4) coefficients \
+Frequency-domain (Welch PSD): \
+Bandpower 20–150 Hz \
+Bandpower 150–350 Hz \
+Mean frequency \
+Median frequency \
+Spectral entropy \
 
 ## Default mode:
 
@@ -54,24 +54,24 @@ Visualizations (Auto-Generated)
 
 ##The training script saves the following plots in reports/:
 
-Confusion matrix of the best model
-Confusion matrices of all models
-Model comparison bar chart (macro-F1)
-Random Forest feature-importance plot
-Per-class F1 bar plot
-PCA 2D feature-space visualization
+Confusion matrix of the best model \
+Confusion matrices of all models \
+Model comparison bar chart (macro-F1) \
+Random Forest feature-importance plot \
+Per-class F1 bar plot \
+PCA 2D feature-space visualization \
 
 ##Output Artifacts
 
 Saved under:
 exports/classic_ml/{subject}/{date}/
-Includes:
-Best model (.joblib)
-Scaler
-run.json metadata
-Per-model artifacts (one file per classifier)
-All plots (PNG)
-Results table (.csv)
+Includes: \
+Best model (.joblib) \
+Scaler \
+run.json metadata \
+Per-model artifacts (one file per classifier) \
+All plots (PNG) \
+Results table (.csv) \
 
 ## How to Run
 
@@ -90,10 +90,10 @@ This is important for real-time prosthetic control.
 
 ## Evaluation Metrics:
 
-Macro-F1 (primary metric)
-Accuracy
-Precision (macro)
-Recall (macro)
-Per-class F1
-Latency (ms)
-Confusion matrices
+Macro-F1 (primary metric) \
+Accuracy \
+Precision (macro) \
+Recall (macro) \
+Per-class F1 \
+Latency (ms) \
+Confusion matrices \
