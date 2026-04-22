@@ -11,9 +11,11 @@ classic_ml/ \
 │ └── freq_domain.py \
 ├── datasets/ \
 │ └── classic_ml_dataset.py \
+├── utils/ \
+│ └── plots.py \
 └── models/ \
 └── train_classic.py \
-All shared preprocessing (windowing, filtering, dummy data, config loading) lives in src/common.
+All shared preprocessing (windowing, filtering, dummy data, config loading) lives in src/common. Plotting helpers are kept in src/classic_ml/utils/plots.py.
 
 ## Pipeline Overview:
 
@@ -22,9 +24,9 @@ Load data: dummy EMG or real EMG (raw or envelope).
 Window the signal using majority-vote labeling.
 Extract features: time, frequency, or both (time+freq).
 Scale features with StandardScaler.
-Train four models: Logistic Regression, Linear SVM, RBF SVM, Random Forest.
+Train five models: Logistic Regression, Linear SVM, RBF SVM, Random Forest, XGBoost.
 Select best model using macro-F1.
-Generate visual plots.
+Generate visual plots and NO ACTION rejection-layer evaluation.
 Save all artifacts and metadata.
 
 ## Features:
@@ -58,8 +60,11 @@ Confusion matrix of the best model \
 Confusion matrices of all models \
 Model comparison bar chart (macro-F1) \
 Random Forest feature-importance plot \
+XGBoost feature-importance plot \
 Per-class F1 bar plot \
-PCA 2D feature-space visualization 
+PCA 2D feature-space visualization \
+t-SNE 2D feature-space visualization \
+UMAP 2D feature-space visualization
 
 ## Output Artifacts
 
@@ -71,7 +76,8 @@ Scaler \
 run.json metadata \
 Per-model artifacts (one file per classifier) \
 All plots (PNG) \
-Results table (.csv) 
+Results table (.csv) \
+NO ACTION evaluation (.json)
 
 ## How to Run
 
