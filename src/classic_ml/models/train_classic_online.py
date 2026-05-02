@@ -20,6 +20,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
+from sklearn.svm import LinearSVC
 from xgboost import XGBClassifier
 
 from src.common.io.emg_loader import (
@@ -275,17 +276,22 @@ def main():
             max_iter=1000,
             multi_class="auto",
         ),
-        "svm_linear": SVC(
-            kernel="linear",
-            C=1.0,
-            probability=True,
-        ),
-        "svm_rbf": SVC(
-            kernel="rbf",
-            C=1.0,
-            gamma="scale",
-            probability=True,
-        ),
+        # "svm_linear": LinearSVC(
+        #    C=1.0,
+        #   max_iter=5000,
+        #    dual=False,
+        # ),
+        # "svm_linear": SVC(
+        #    kernel="linear",
+        #    C=1.0,
+        #    # probability=True,
+        # ),
+        # "svm_rbf": SVC(
+        #   kernel="rbf",
+        #   C=1.0,
+        #   gamma="scale",
+        #   probability=True,
+        # ),
         "rf": RandomForestClassifier(
             n_estimators=200,
             max_depth=None,
