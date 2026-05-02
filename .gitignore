@@ -1,6 +1,7 @@
 #OUTPUT
 reports/
 exports/
+data/
 
 # FILE TYPES GENERATED DURING TRAINING
 *.joblib

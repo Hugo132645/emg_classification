@@ -1,7 +1,7 @@
 # EMG Preprocessing
 
 # Signal / acquisition
-sample_rate_hz: 1000            
+sample_rate_hz: 100
 num_channels: 3
 
 # Filtering
