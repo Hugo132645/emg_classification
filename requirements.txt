@@ -27,3 +27,4 @@ pyyaml==6.0.2
 
 # Classic ML extra
 xgboost==3.1.2
+umap-learn==0.5.12
