@@ -78,6 +78,7 @@ def make_dataloaders_dummy(
     if seed is not None:
         torch.manual_seed(seed)
         np.random.seed(seed)
+
     sample_rate = cfg.sample_rate_hz
 
     #Generating dummy_data
@@ -146,14 +147,22 @@ def make_dataloaders_np(
         seq_length: int = 32,
         seq_stride: int = 8,
         seed: int | None = None,
-        drop_rest: bool = True,
+        drop_rest: bool = False,
         train_reps: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8),
         val_reps: tuple[int, ...] = (9, 10),
-        allowed_exercises: tuple[int, ...] | None = None
+        allowed_exercises: tuple[int, ...] | None = None,
+        selected_channels: tuple[int, ...] | None = None,
+        include_rest: bool = True,
+        rest_val_ratio: float = 0.2
 ):
+    if include_rest and drop_rest:
+        raise ValueError("include_rest=True requires drop_rest=False")
+
     if seed is not None:
         torch.manual_seed(seed)
         np.random.seed(seed)
+
+    rng = np.random.RandomState(seed if seed is not None else 42)
 
     sample_rate = cfg.sample_rate_hz
     csv_files = sorted(Path(p) for p in _search_csv_files(data_path))
@@ -170,6 +179,12 @@ def make_dataloaders_np(
             drop_rest=drop_rest,
         )
 
+        if np.any(raw_labels == 0):
+            print(f"Rest still present in {csv_path.name}")
+
+        if selected_channels is not None:
+            x = x[:, list(selected_channels)]
+
         if allowed_exercises is not None and int(exercise) not in allowed_exercises:
             continue
 
@@ -179,7 +194,10 @@ def make_dataloaders_np(
         file_records.append((csv_path, x, raw_labels, rerepetition, subject, exercise))
 
         for lab in np.unique(raw_labels):
-            label_pairs.add((exercise, int(lab)))
+            lab = int(lab)
+            if lab == 0 and not include_rest:
+                continue
+            label_pairs.add((exercise, lab))
 
     if not file_records:
         raise ValueError("No usable EMG")
@@ -234,7 +252,18 @@ def make_dataloaders_np(
 
             window_labels = np.asarray(window_labels, dtype=np.int64)
 
-            if rep in train_reps:
+
+            is_rest_block = (int(raw_labels[start]) == 0)
+
+            if is_rest_block:
+                if include_rest:
+                    if rng.rand() < rest_val_ratio:
+                        val_feature_blocks.append(features)
+                        val_label_blocks.append(window_labels)
+                    else:
+                        train_feature_blocks.append(features)
+                        train_label_blocks.append(window_labels)
+            elif rep in train_reps:
                 train_feature_blocks.append(features)
                 train_label_blocks.append(window_labels)
             elif rep in val_reps:
@@ -499,9 +528,11 @@ def objective(trial, cfg, data_path, device, seed=42):
         seq_length=seq_length,
         seq_stride=seq_stride,
         seed=seed,
-        drop_rest=True,
+        drop_rest=False,
         train_reps=(1, 2, 3, 4, 5, 6, 7, 8),
-        val_reps=(9, 10)
+        val_reps=(9, 10),
+        allowed_exercises = (2,),
+        selected_channels = (0, 1),
     )
 
     model = build_model(
@@ -616,11 +647,12 @@ if __name__ == "__main__":
         batch_size=32,
         seq_length=16,
         seq_stride=16,
-        drop_rest=True,
+        drop_rest=False,
         train_reps=(1, 2, 3, 4, 5, 6, 7, 8),
         val_reps=(9, 10),
         seed=sd,
-        allowed_exercises=(2,)
+        allowed_exercises=(2,),
+        rest_val_ratio = 0.1
     )
 
     hidden_dim = 32
@@ -628,7 +660,7 @@ if __name__ == "__main__":
     dropout = 0.4
     lr = 1e-3
     weight_decay = 1e-4
-    epochs = 30
+    epochs = 16
 
     lstm_model = build_model(
         model_type="lstm",

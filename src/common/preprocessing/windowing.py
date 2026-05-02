@@ -93,6 +93,11 @@ def window_signal_np(
         else:
             window_labels.append(None)
 
+    if labels is not None:
+        unique_labels, counts = np.unique(window_labels, return_counts=True)
+        print("Window labels available:", unique_labels)
+        print("Window label counts:", dict(zip(unique_labels.tolist(), counts.tolist())))
+
     windows = np.stack(windows).astype(np.float32)
     window_labels = np.asarray(window_labels)
     times_ms = np.asarray(times_ms, dtype=np.float32)
