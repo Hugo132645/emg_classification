@@ -558,7 +558,7 @@ def main():
             f"reports/{session_date}/rest/feature_importance_xgb_gain_{timestamp}.png"
         )
         print("\n[7d] Plotting XGBoost feature importance...")
-        plot_xgb_feature_importance(models["xgboost"], feature_names, fi_xgb_path)
+        plot_xgb_feature_importance(models["xgboost"], fi_xgb_path)
         print("Saved XGBoost feature importance to:", fi_xgb_path)
 
     # F1 score
