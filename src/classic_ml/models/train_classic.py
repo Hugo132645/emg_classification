@@ -14,6 +14,8 @@ from src.classic_ml.utils.plots import (
     plot_pca_2d,
     plot_tsne_2d,
     plot_umap_2d,
+    plot_tsne_3d,
+    plot_umap_3d,
 )
 import pandas as pd
 from sklearn.metrics import (
@@ -537,6 +539,7 @@ def main():
         plot_confusion_matrix(cm_all, class_names, cm_title_all, cm_path_all)
         print("Saved confusion matrix for", name, "to:", cm_path_all)
 
+    # RF feature importance
     if "rf" in models:
         from src.classic_ml.features.time_domain import td_feature_names
         from src.classic_ml.features.freq_domain import feature_names_freq
@@ -558,27 +561,40 @@ def main():
         plot_xgb_feature_importance(models["xgboost"], feature_names, fi_xgb_path)
         print("Saved XGBoost feature importance to:", fi_xgb_path)
 
+    # F1 score
     print("\n[7e] Plotting per-class F1 scores...")
     y_pred_best = best_model.predict(X_test)
     f1_path = Path(f"reports/{session_date}/best/per_class_f1_{timestamp}.png")
     plot_per_class_f1(y_test, y_pred_best, class_ids, class_names, f1_path)
     print("Saved per-class F1 plot to:", f1_path)
 
+    # PCA
     print("\n[7f] Plotting PCA 2D feature space...")
     pca_path = Path(f"reports/{session_date}/best/pca_2d_{timestamp}.png")
     plot_pca_2d(X, y, class_ids, class_names, pca_path)
     print("Saved PCA 2D plot to:", pca_path)
 
+    # t-SNE
     print("\n[7g] Plotting t-SNE 2D feature space...")
-    tsne_path = Path(f"reports/{session_date}/best/tsne_2d_{timestamp}.png")
+    tsne_path = Path(f"reports/{session_date}/online/tsne_2d_{timestamp}.png")
     plot_tsne_2d(X, y, class_ids, class_names, tsne_path)
     print("Saved t-SNE 2D plot to:", tsne_path)
 
+    print("\n[7g-3d] Plotting t-SNE 3D feature space...")
+    tsne_3d_path = Path(f"reports/{session_date}/best/tsne_3d_{timestamp}.png")
+    plot_tsne_3d(X, y, class_ids, class_names, tsne_3d_path)
+    print("Saved t-SNE 3D plot to:", tsne_3d_path)
+
+    # UMAP
     print("\n[7h] Plotting UMAP 2D feature space...")
-    umap_path = Path(f"reports/{session_date}/best/umap_2d_{timestamp}.png")
+    umap_path = Path(f"reports/{session_date}/online/umap_2d_{timestamp}.png")
     plot_umap_2d(X, y, class_ids, class_names, umap_path)
     print("Saved UMAP 2D plot to:", umap_path)
-    print("\n[7i] Evaluating NO ACTION rejection layer...")
+
+    print("\n[7h-3d] Plotting UMAP 3D feature space...")
+    umap_3d_path = Path(f"reports/{session_date}/best/umap_3d_{timestamp}.png")
+    plot_umap_3d(X, y, class_ids, class_names, umap_3d_path)
+    print("Saved UMAP 3D plot to:", umap_3d_path)
 
     rejection_results = None
     rejection_results_path = None

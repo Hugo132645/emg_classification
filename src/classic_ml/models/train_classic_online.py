@@ -54,6 +54,8 @@ from src.classic_ml.utils.plots import (
     plot_pca_2d,
     plot_tsne_2d,
     plot_umap_2d,
+    plot_tsne_3d,
+    plot_umap_3d,
 )
 
 # Online validation settings
@@ -461,11 +463,21 @@ def main():
     plot_tsne_2d(X, y, class_ids, class_names, tsne_path)
     print("Saved t-SNE 2D plot to:", tsne_path)
 
+    print("\n[7g-3d] Plotting t-SNE 3D feature space...")
+    tsne_3d_path = Path(f"reports/{session_date}/best/tsne_3d_{timestamp}.png")
+    plot_tsne_3d(X, y, class_ids, class_names, tsne_3d_path)
+    print("Saved t-SNE 3D plot to:", tsne_3d_path)
+
     # 8h. UMAP
     print("\n[7h] Plotting UMAP 2D feature space...")
     umap_path = Path(f"reports/{session_date}/online/umap_2d_{timestamp}.png")
     plot_umap_2d(X, y, class_ids, class_names, umap_path)
     print("Saved UMAP 2D plot to:", umap_path)
+
+    print("\n[7h-3d] Plotting UMAP 3D feature space...")
+    umap_3d_path = Path(f"reports/{session_date}/best/umap_3d_{timestamp}.png")
+    plot_umap_3d(X, y, class_ids, class_names, umap_3d_path)
+    print("Saved UMAP 3D plot to:", umap_3d_path)
 
     # 8i. NO ACTION rejection layer
     print("\n[7i] Evaluating NO ACTION rejection layer...")

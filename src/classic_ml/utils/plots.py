@@ -218,3 +218,88 @@ def plot_umap_2d(
     ensure_parent_dir(str(out_path))
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
+
+
+def plot_tsne_3d(
+    X,
+    y,
+    class_ids,
+    class_names,
+    out_path: Path,
+    random_state: int = 0,
+) -> None:
+    X3 = TSNE(
+        n_components=3,
+        perplexity=30,
+        learning_rate="auto",
+        init="pca",
+        random_state=random_state,
+    ).fit_transform(X)
+
+    fig = plt.figure(figsize=(7, 6))
+    ax = fig.add_subplot(111, projection="3d")
+    y_arr = np.asarray(y)
+
+    for cls_id, cls_name in zip(class_ids, class_names):
+        mask = y_arr == cls_id
+        ax.scatter(
+            X3[mask, 0],
+            X3[mask, 1],
+            X3[mask, 2],
+            s=12,
+            label=cls_name,
+        )
+
+    ax.set_title("t-SNE Feature Space (3D)")
+    ax.set_xlabel("t-SNE 1")
+    ax.set_ylabel("t-SNE 2")
+    ax.set_zlabel("t-SNE 3")
+    ax.legend()
+
+    plt.tight_layout()
+    ensure_parent_dir(str(out_path))
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+
+
+def plot_umap_3d(
+    X,
+    y,
+    class_ids,
+    class_names,
+    out_path: Path,
+    random_state: int = 0,
+) -> None:
+    reducer = umap.UMAP(
+        n_components=3,
+        n_neighbors=15,
+        min_dist=0.1,
+        metric="euclidean",
+        random_state=random_state,
+    )
+    X3 = reducer.fit_transform(X)
+
+    fig = plt.figure(figsize=(7, 6))
+    ax = fig.add_subplot(111, projection="3d")
+    y_arr = np.asarray(y)
+
+    for cls_id, cls_name in zip(class_ids, class_names):
+        mask = y_arr == cls_id
+        ax.scatter(
+            X3[mask, 0],
+            X3[mask, 1],
+            X3[mask, 2],
+            s=12,
+            label=cls_name,
+        )
+
+    ax.set_title("UMAP Feature Space (3D)")
+    ax.set_xlabel("UMAP 1")
+    ax.set_ylabel("UMAP 2")
+    ax.set_zlabel("UMAP 3")
+    ax.legend()
+
+    plt.tight_layout()
+    ensure_parent_dir(str(out_path))
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
