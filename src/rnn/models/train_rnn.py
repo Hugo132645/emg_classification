@@ -1,4 +1,4 @@
-#Importing all needed files
+# Importing all needed files
 from lib2to3.fixes.fix_input import context
 
 import numpy as np
@@ -9,8 +9,17 @@ import optuna
 from onnxruntime.transformers.optimizer import MODEL_TYPES
 
 from src.rnn.models.model_rnn import GRUModel, LSTMModel
-from src.common.io.schemas import load_cfg, gesture_to_id, expand_template, ensure_parent_dir
-from src.rnn.datasets.sequence_dataset import Standardizer, FeatureSequenceDataset, encode_labels_from_cfg
+from src.common.io.schemas import (
+    load_cfg,
+    gesture_to_id,
+    expand_template,
+    ensure_parent_dir,
+)
+from src.rnn.datasets.sequence_dataset import (
+    Standardizer,
+    FeatureSequenceDataset,
+    encode_labels_from_cfg,
+)
 from src.rnn.features.seq_features import compute_seq_features
 from src.common.io.dummy_data import generate_dummy_emg
 from torch.utils.data import DataLoader
@@ -18,24 +27,29 @@ from src.common.preprocessing.windowing import window_signal
 import matplotlib.pyplot as plt
 from datetime import datetime
 from pathlib import Path
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader, ConcatDataset, Subset
 from src.rnn.datasets.sequence_dataset import Standardizer, FeatureSequenceDataset
 from src.common.preprocessing.windowing import window_signal_np
 from src.common.io.emg_loader import _search_csv_files, process_emg_for_windowing
 import copy
 from dataclasses import dataclass
 
-#Loading config, seed, device
+# Loading config, seed, device
 config = load_cfg()
 sd = 42
-dvc = torch.device("mps" if torch.backends.mps.is_available()
-                      else ("cuda" if torch.cuda.is_available() else "cpu"))
+dvc = torch.device(
+    "mps"
+    if torch.backends.mps.is_available()
+    else ("cuda" if torch.cuda.is_available() else "cpu")
+)
+
 
 def compute_confusion_matrix(y_true, y_pred, num_classes):
     cm = torch.zeros(num_classes, num_classes, dtype=torch.int64)
     for t, p in zip(y_true, y_pred):
-        cm[t,p] += 1
+        cm[t, p] += 1
     return cm
+
 
 def get_targets_preds(loader, model, device):
     model.eval()
@@ -43,9 +57,9 @@ def get_targets_preds(loader, model, device):
     all_targets = []
     with torch.no_grad():
         for batch in loader:
-            x = batch['x'].to(device)
-            y = batch['y'].to(device)
-            lengths = batch['length'].to(device)
+            x = batch["x"].to(device)
+            y = batch["y"].to(device)
+            lengths = batch["length"].to(device)
 
             logits = model(x, lengths)
             preds = torch.argmax(logits, dim=-1)
@@ -57,23 +71,30 @@ def get_targets_preds(loader, model, device):
         all_targets = torch.cat(all_targets, dim=0).numpy()
         return all_targets, all_preds
 
+
 def _cont_runs(labels: np.ndarray, rerepetition: np.ndarray):
     if len(labels) == 0:
         return []
 
-    change_idx = np.where(
-        (np.diff(labels) != 0) | (np.diff(rerepetition) != 0)
-    )[0] + 1
+    change_idx = np.where((np.diff(labels) != 0) | (np.diff(rerepetition) != 0))[0] + 1
 
     starts = np.r_[0, change_idx]
     ends = np.r_[change_idx, len(labels)]
 
-    return [(int(s), int(e), int(labels[s]), int(rerepetition[s])) for s, e in zip(starts, ends)]
+    return [
+        (int(s), int(e), int(labels[s]), int(rerepetition[s]))
+        for s, e in zip(starts, ends)
+    ]
 
 
 def make_dataloaders_dummy(
-        cfg, seconds: int = 100, batch_size: int = 32, seq_length: int = 32,
-        seq_stride: int = 8, val_ratio: float = 0.3, seed: int = None
+    cfg,
+    seconds: int = 100,
+    batch_size: int = 32,
+    seq_length: int = 32,
+    seq_stride: int = 8,
+    val_ratio: float = 0.3,
+    seed: int = None,
 ):
     if seed is not None:
         torch.manual_seed(seed)
@@ -81,16 +102,26 @@ def make_dataloaders_dummy(
 
     sample_rate = cfg.sample_rate_hz
 
-    #Generating dummy_data
-    dat, raw_labels, timestamps = generate_dummy_emg(seconds, sample_rate, cfg.gestures, block_s=5, seed=seed)
+    # Generating dummy_data
+    dat, raw_labels, timestamps = generate_dummy_emg(
+        seconds, sample_rate, cfg.gestures, block_s=5, seed=seed
+    )
 
-    #Windowing dummy_data
-    windows, raw_labels, timestamps = window_signal(dat['signal'], sample_rate,
-                                                    labels=raw_labels, timestamps_ms=timestamps, window_ms=cfg.window_ms, hop_ms=cfg.hop_ms)
-    ft_vectors, ft_names = compute_seq_features(windows, sample_rate, deltas=True, spectral_feat=True)
+    # Windowing dummy_data
+    windows, raw_labels, timestamps = window_signal(
+        dat["signal"],
+        sample_rate,
+        labels=raw_labels,
+        timestamps_ms=timestamps,
+        window_ms=cfg.window_ms,
+        hop_ms=cfg.hop_ms,
+    )
+    ft_vectors, ft_names = compute_seq_features(
+        windows, sample_rate, deltas=True, spectral_feat=True
+    )
     labels_int = encode_labels_from_cfg(cfg, raw_labels)
 
-    #Creating a Standardizer
+    # Creating a Standardizer
     std = Standardizer()
     dataset = FeatureSequenceDataset(
         feature_vectors=ft_vectors,
@@ -101,24 +132,26 @@ def make_dataloaders_dummy(
         device=None,
     )
 
-    n=len(dataset)
+    n = len(dataset)
     indices = np.arange(n)
     np.random.shuffle(indices)
     n_val = int(val_ratio * n)
     val_idxs = indices[:n_val]
     train_idxs = indices[n_val:]
 
-    #Dividing into training and validation dataset
+    # Dividing into training and validation dataset
     train_dataset = torch.utils.data.Subset(dataset, train_idxs)
     vals_dataset = torch.utils.data.Subset(dataset, val_idxs)
 
-    #Collation into torch.tensors for training and validation
+    # Collation into torch.tensors for training and validation
     def collate_fn(batch):
         return {
-            "x": torch.stack([b["x"] for b in batch], dim=0),          # [B, L, D]
+            "x": torch.stack([b["x"] for b in batch], dim=0),  # [B, L, D]
             "y_seq": torch.stack([b["y_seq"] for b in batch], dim=0),  # [B, L]
-            "y": torch.stack([b["y"] for b in batch], dim=0),          # [B]
-            "length": torch.tensor([int(b["length"]) for b in batch], dtype=torch.long),# [B]
+            "y": torch.stack([b["y"] for b in batch], dim=0),  # [B]
+            "length": torch.tensor(
+                [int(b["length"]) for b in batch], dtype=torch.long
+            ),  # [B]
             "names": batch[0]["names"],
         }
 
@@ -138,22 +171,32 @@ def make_dataloaders_dummy(
     label_names = list(cfg.gestures)
     label_map = {name: i for i, name in enumerate(label_names)}
 
-    return train_loader, val_loader, input_dim, num_classes, ft_names, std, label_names, label_map
+    return (
+        train_loader,
+        val_loader,
+        input_dim,
+        num_classes,
+        ft_names,
+        std,
+        label_names,
+        label_map,
+    )
+
 
 def make_dataloaders_np(
-        cfg,
-        data_path: str,
-        batch_size: int = 32,
-        seq_length: int = 32,
-        seq_stride: int = 8,
-        seed: int | None = None,
-        drop_rest: bool = False,
-        train_reps: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8),
-        val_reps: tuple[int, ...] = (9, 10),
-        allowed_exercises: tuple[int, ...] | None = None,
-        selected_channels: tuple[int, ...] | None = None,
-        include_rest: bool = True,
-        rest_val_ratio: float = 0.2
+    cfg,
+    data_path: str,
+    batch_size: int = 32,
+    seq_length: int = 32,
+    seq_stride: int = 8,
+    seed: int | None = None,
+    drop_rest: bool = False,
+    train_reps: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8),
+    val_reps: tuple[int, ...] = (9, 10),
+    allowed_exercises: tuple[int, ...] | None = None,
+    selected_channels: tuple[int, ...] | None = None,
+    include_rest: bool = True,
+    rest_val_ratio: float = 0.2,
 ):
     if include_rest and drop_rest:
         raise ValueError("include_rest=True requires drop_rest=False")
@@ -252,8 +295,7 @@ def make_dataloaders_np(
 
             window_labels = np.asarray(window_labels, dtype=np.int64)
 
-
-            is_rest_block = (int(raw_labels[start]) == 0)
+            is_rest_block = int(raw_labels[start]) == 0
 
             if is_rest_block:
                 if include_rest:
@@ -304,13 +346,15 @@ def make_dataloaders_np(
     train_dataset = ConcatDataset(train_datasets)
     vals_dataset = ConcatDataset(val_datasets)
 
-    #Collation into torch.tensors for training and validation
+    # Collation into torch.tensors for training and validation
     def collate_fn(batch):
         return {
-            "x": torch.stack([b["x"] for b in batch], dim=0),          # [B, L, D]
+            "x": torch.stack([b["x"] for b in batch], dim=0),  # [B, L, D]
             "y_seq": torch.stack([b["y_seq"] for b in batch], dim=0),  # [B, L]
-            "y": torch.stack([b["y"] for b in batch], dim=0),          # [B]
-            "length": torch.tensor([int(b["length"]) for b in batch], dtype=torch.long),# [B]
+            "y": torch.stack([b["y"] for b in batch], dim=0),  # [B]
+            "length": torch.tensor(
+                [int(b["length"]) for b in batch], dtype=torch.long
+            ),  # [B]
             "names": batch[0]["names"],
         }
 
@@ -330,11 +374,20 @@ def make_dataloaders_np(
     input_dim = train_feature_blocks[0].shape[1]
     num_classes = len(label_map)
 
-    return train_loader, val_loader, input_dim, num_classes, ft_names, std, label_names, label_map
+    return (
+        train_loader,
+        val_loader,
+        input_dim,
+        num_classes,
+        ft_names,
+        std,
+        label_names,
+        label_map,
+    )
 
 
-def run_epoch(loader, model, criterion, optimizer=None, device="mps", grad_clip = None):
-    #Running 1 epoch -> one-time training dataset
+def run_epoch(loader, model, criterion, optimizer=None, device="mps", grad_clip=None):
+    # Running 1 epoch -> one-time training dataset
     if optimizer is None:
         model.eval()
     else:
@@ -343,13 +396,13 @@ def run_epoch(loader, model, criterion, optimizer=None, device="mps", grad_clip 
     correct = 0
     total = 0
 
-    #Differentiating running epoch between training/validation data -> val not calculating gradient
+    # Differentiating running epoch between training/validation data -> val not calculating gradient
     context = torch.no_grad() if optimizer is None else torch.enable_grad()
     with context:
         for batch in loader:
-            x = batch['x'].to(device)
-            y = batch['y'].to(device)
-            lengths = batch['length'].to(device)
+            x = batch["x"].to(device)
+            y = batch["y"].to(device)
+            lengths = batch["length"].to(device)
 
             if optimizer is not None:
                 optimizer.zero_grad()
@@ -375,7 +428,16 @@ def run_epoch(loader, model, criterion, optimizer=None, device="mps", grad_clip 
     accuracy = correct / total
     return avg_loss, accuracy
 
-def build_model(model_type, input_dim, hidden_dim, num_classes, num_layers, dropout, bidirectional=False):
+
+def build_model(
+    model_type,
+    input_dim,
+    hidden_dim,
+    num_classes,
+    num_layers,
+    dropout,
+    bidirectional=False,
+):
     model_type = model_type.lower()
 
     if model_type == "gru":
@@ -399,8 +461,9 @@ def build_model(model_type, input_dim, hidden_dim, num_classes, num_layers, drop
     else:
         raise ValueError(f"Unsupported model_type: {model_type}")
 
+
 def train_save_model(
-model,
+    model,
     train_loader,
     val_loader,
     device,
@@ -448,7 +511,12 @@ model,
         print(f"Epoch {epoch + 1}/{epochs}")
 
         train_loss, train_acc = run_epoch(
-            train_loader, model, criterion, optimizer=optimizer, device=device, grad_clip=grad_clip
+            train_loader,
+            model,
+            criterion,
+            optimizer=optimizer,
+            device=device,
+            grad_clip=grad_clip,
         )
         val_loss, val_acc = run_epoch(
             val_loader, model, criterion, optimizer=None, device=device
@@ -509,6 +577,7 @@ model,
     }
     return model, history
 
+
 def objective(trial, cfg, data_path, device, seed=42):
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
     seq_length = trial.suggest_categorical("seq_length", [16, 32, 48])
@@ -521,18 +590,20 @@ def objective(trial, cfg, data_path, device, seed=42):
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
     label_smoothing = trial.suggest_float("label_smoothing", 0.0, 0.15)
 
-    train_loader, val_loader, input_dim, num_classes, ft_names, std, _, _ = make_dataloaders_np(
-        cfg = cfg,
-        data_path=data_path,
-        batch_size=batch_size,
-        seq_length=seq_length,
-        seq_stride=seq_stride,
-        seed=seed,
-        drop_rest=False,
-        train_reps=(1, 2, 3, 4, 5, 6, 7, 8),
-        val_reps=(9, 10),
-        allowed_exercises = (2,),
-        selected_channels = (0, 1),
+    train_loader, val_loader, input_dim, num_classes, ft_names, std, _, _ = (
+        make_dataloaders_np(
+            cfg=cfg,
+            data_path=data_path,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            seq_stride=seq_stride,
+            seed=seed,
+            drop_rest=False,
+            train_reps=(1, 2, 3, 4, 5, 6, 7, 8),
+            val_reps=(9, 10),
+            allowed_exercises=(2,),
+            selected_channels=(0, 1),
+        )
     )
 
     model = build_model(
@@ -552,8 +623,17 @@ def objective(trial, cfg, data_path, device, seed=42):
     max_epochs = 12
 
     for epoch in range(max_epochs):
-        run_epoch(train_loader, model, criterion, optimizer=optimizer, device=device, grad_clip=1.0)
-        _, val_acc = run_epoch(val_loader, model, criterion, optimizer=None, device=device)
+        run_epoch(
+            train_loader,
+            model,
+            criterion,
+            optimizer=optimizer,
+            device=device,
+            grad_clip=1.0,
+        )
+        _, val_acc = run_epoch(
+            val_loader, model, criterion, optimizer=None, device=device
+        )
 
         best_val_acc = max(best_val_acc, val_acc)
 
@@ -563,9 +643,12 @@ def objective(trial, cfg, data_path, device, seed=42):
 
     return best_val_acc
 
+
 def run_hyperparameter_opt(cfg, data_path, device, n_trials=25, seed=42):
     study = optuna.create_study(direction="maximize")
-    study.optimize(lambda trial: objective(trial, cfg, data_path, device, seed), n_trials=n_trials)
+    study.optimize(
+        lambda trial: objective(trial, cfg, data_path, device, seed), n_trials=n_trials
+    )
 
     print("Best trial:")
     print(study.best_trial.number)
@@ -575,6 +658,7 @@ def run_hyperparameter_opt(cfg, data_path, device, n_trials=25, seed=42):
         print(f"  {k}: {v}")
 
     return study
+
 
 def load_best_model(checkpoint_path, device):
     checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -604,6 +688,7 @@ def load_best_model(checkpoint_path, device):
         "label_map": checkpoint["label_map"],
         "checkpoint": checkpoint,
     }
+
 
 def predict_with_model(model, loader, device, label_names=None):
     model.eval()
@@ -637,13 +722,23 @@ def predict_with_model(model, loader, device, label_names=None):
 
     return result
 
+
 if __name__ == "__main__":
     sd = 42
     config = load_cfg()
 
-    train_loader, val_loader, input_dim, num_classes, ft_names, std, label_names, label_map= make_dataloaders_np(
+    (
+        train_loader,
+        val_loader,
+        input_dim,
+        num_classes,
+        ft_names,
+        std,
+        label_names,
+        label_map,
+    ) = make_dataloaders_np(
         cfg=config,
-        data_path="/Users/norbertcesar/PycharmProjects/emg_classification/data/input_data/csv_files",
+        data_path="/emg_classification/data/input_data/ninapro_db1/csv_files",
         batch_size=32,
         seq_length=16,
         seq_stride=16,
@@ -652,7 +747,7 @@ if __name__ == "__main__":
         val_reps=(9, 10),
         seed=sd,
         allowed_exercises=(2,),
-        rest_val_ratio = 0.1
+        rest_val_ratio=0.1,
     )
 
     hidden_dim = 32
@@ -706,9 +801,7 @@ if __name__ == "__main__":
     y_pred = preds["y_pred"]
 
     cm = compute_confusion_matrix(
-        torch.from_numpy(y_true),
-        torch.from_numpy(y_pred),
-        num_classes=num_classes
+        torch.from_numpy(y_true), torch.from_numpy(y_pred), num_classes=num_classes
     ).numpy()
 
     count = list(range(1, len(history["train_loss"]) + 1))
@@ -738,13 +831,14 @@ if __name__ == "__main__":
         for j in range(num_classes):
             value = cm[i, j]
             ax2.text(
-                j, i, str(value),
-                ha="center", va="center",
+                j,
+                i,
+                str(value),
+                ha="center",
+                va="center",
                 color="black" if value > cm.max() / 2.0 else "white",
                 fontsize=8,
             )
 
     plt.tight_layout()
     plt.show()
-
-

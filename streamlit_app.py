@@ -611,8 +611,8 @@ def build_history_df(
                 preprocess_mode=preprocess_mode,
                 tau_override=tau_override,
             )
-            row[f"{display_name}_label"] = pred.label
-            row[f"{display_name}_confidence"] = pred.confidence
+            row[f"{display_name}_label"] = pred.label  # type: ignore
+            row[f"{display_name}_confidence"] = pred.confidence  # type: ignore
 
         rows.append(row)
 
@@ -836,9 +836,7 @@ def main():
 
             label_cols = [c for c in hist_df.columns if c.endswith("_label")]
             if label_cols:
-                st.dataframe(
-                    hist_df[["timestamp_ms"] + label_cols], use_container_width=True
-                )
+                st.dataframe(hist_df[["timestamp_ms"] + label_cols], width=True)
 
     if "Raw signal" in visible_panels:
         st.subheader("Raw window")
