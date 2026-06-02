@@ -683,7 +683,7 @@ def objective(trial, cfg, data_path, device, seed=42):
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     best_val_acc = 0.0
-    max_epochs = 12
+    max_epochs = 10
 
     for epoch in range(max_epochs):
         run_epoch(

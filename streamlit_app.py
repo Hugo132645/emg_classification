@@ -19,7 +19,7 @@ from src.classic_ml.features import freq_domain as fd
 from src.cnn.transforms.spectrograms import batch_compute_spectrograms
 from src.cnn.models.model_cnn import EMGConvNet
 from src.rnn.features.seq_features import compute_seq_features
-from src.rnn.models.model_rnn import GRUModel, LSTMModel
+from src.rnn.models.model_rnn import GRUModel
 
 
 RECORDING_ROOTS = [
@@ -78,6 +78,7 @@ def find_recording_files() -> list[str]:
 @st.cache_data(show_spinner=False)
 def load_recording(path: str, fs: int) -> tuple[pd.DataFrame, list[str]]:
     p = Path(path)
+
     if p.suffix.lower() == ".csv":
         df = pd.read_csv(p)
     elif p.suffix.lower() == ".parquet":
@@ -100,7 +101,9 @@ def load_recording(path: str, fs: int) -> tuple[pd.DataFrame, list[str]]:
                 df["sample_idx"].to_numpy(dtype=np.float64) / fs
             ) * 1000.0
         else:
-            df["timestamp_ms"] = (np.arange(len(df), dtype=np.float64) / fs) * 1000.0
+            df["timestamp_ms"] = (
+                np.arange(len(df), dtype=np.float64) / fs
+            ) * 1000.0
 
     return df.reset_index(drop=True), channel_cols
 
@@ -216,13 +219,66 @@ def load_rnn_artifact(path: str) -> dict[str, Any]:
 
 def load_any_artifact(path: str) -> dict[str, Any]:
     kind = identify_artifact_type(path)
+
     if kind == "classic":
         return load_classic_artifact(path)
     if kind == "cnn":
         return load_cnn_artifact(path)
     if kind == "rnn":
         return load_rnn_artifact(path)
+
     raise ValueError(f"Unsupported artifact kind: {kind}")
+
+
+def artifact_preprocess_mode(
+    loaded: dict[str, Any],
+    fallback: str,
+) -> str:
+    track = loaded.get("track")
+
+    if track == "rnn":
+        return str(loaded.get("artifact", {}).get("preprocess_mode", fallback))
+
+    if track == "classic":
+        return str(loaded.get("preprocess_mode", fallback))
+
+    if track == "cnn":
+        return str(loaded.get("checkpoint", {}).get("preprocess_mode", fallback))
+
+    return fallback
+
+
+def artifact_selected_channel_cols(
+    loaded: dict[str, Any],
+    all_channel_cols: list[str],
+    fallback_channel_cols: list[str],
+) -> list[str]:
+    track = loaded.get("track")
+
+    if track == "rnn":
+        selected = loaded.get("artifact", {}).get("selected_channels", None)
+    elif track == "classic":
+        selected = loaded.get("selected_channels", None)
+    elif track == "cnn":
+        selected = loaded.get("checkpoint", {}).get("selected_channels", None)
+    else:
+        selected = None
+
+    if selected is None:
+        return fallback_channel_cols
+
+    try:
+        indices = [int(i) for i in list(selected)]
+    except Exception:
+        return fallback_channel_cols
+
+    if not indices:
+        return fallback_channel_cols
+
+    if min(indices) < 0 or max(indices) >= len(all_channel_cols):
+        return fallback_channel_cols
+
+    return [all_channel_cols[i] for i in indices]
 
 
 def preprocess_1d(x: np.ndarray, fs: int, mode: str) -> np.ndarray:
@@ -357,8 +413,8 @@ def rnn_sequence_tensor(
     expected_dim = int(loaded_rnn["artifact"]["input_dim"])
     if feats.shape[1] != expected_dim:
         raise ValueError(
-            f"RNN feature dimension mismatch: got {feats.shape[1]}, expected {expected_dim}. "
-            f"Selected channels probably do not match training."
+            f"RNN feature dimension mismatch: got {feats.shape[1]}, "
+            f"expected {expected_dim}. Selected channels probably do not match training."
         )
 
     mean_ = np.asarray(loaded_rnn["artifact"]["standardizer_mean"], dtype=np.float32)
@@ -368,6 +424,21 @@ def rnn_sequence_tensor(
     feats = (feats - mean_) / std_
 
     return torch.from_numpy(feats[None, :, :]).float().to(DEVICE)
+
+
+def is_rest_label(label: Any) -> bool:
+    label_str = str(label)
+
+    if label_str == "0":
+        return True
+
+    if label_str.endswith("_G0"):
+        return True
+
+    if label_str.lower() in {"rest", "no_action", "none"}:
+        return True
+
+    return False
 
 
 def predict_classic(
@@ -407,9 +478,20 @@ def predict_classic(
         probs = model.predict_proba(x_row)[0]
         pred_id = int(np.argmax(probs))
         confidence = float(np.max(probs))
+
+        raw_label = gestures[pred_id]
         accepted = confidence >= tau
-        label = gestures[pred_id] if accepted else "no_action"
-        probs_out = {gestures[i]: float(probs[i]) for i in range(len(gestures))}
+
+        if is_rest_label(raw_label):
+            label = "no_action"
+            accepted = False
+        else:
+            label = raw_label if accepted else "no_action"
+
+        probs_out = {
+            str(gestures[i]): float(probs[i])
+            for i in range(len(gestures))
+        }
     else:
         pred = model.predict(x_row)[0]
         try:
@@ -463,7 +545,10 @@ def predict_cnn(
     confidence = float(np.max(probs_mean))
     accepted = confidence >= tau
     label = class_names[pred_id] if accepted else "no_action"
-    probs_out = {class_names[i]: float(probs_mean[i]) for i in range(len(class_names))}
+    probs_out = {
+        class_names[i]: float(probs_mean[i])
+        for i in range(len(class_names))
+    }
 
     return ModelPrediction(
         display_name=display_name,
@@ -526,11 +611,20 @@ def predict_rnn(
 
     pred_id = int(np.argmax(probs))
     confidence = float(np.max(probs))
+
+    raw_label = inv_label_map[pred_id]
     accepted = confidence >= tau
-    label = inv_label_map[pred_id] if accepted else "no_action"
-    probs_out = {inv_label_map[i]: float(probs[i]) for i in range(len(probs))}
-    top3 = np.argsort(probs)[-3:][::-1]
-    print("RNN top3:", [(inv_label_map[int(i)], float(probs[int(i)])) for i in top3])
+
+    if is_rest_label(raw_label):
+        label = "no_action"
+        accepted = False
+    else:
+        label = raw_label if accepted else "no_action"
+
+    probs_out = {
+        str(inv_label_map[i]): float(probs[i])
+        for i in range(len(probs))
+    }
 
     return ModelPrediction(
         display_name=display_name,
@@ -541,6 +635,22 @@ def predict_rnn(
         latency_ms=latency_ms,
         probs=probs_out,
     )
+
+
+def label_to_gesture_id(label: str) -> int | None:
+    if label == "no_action":
+        return 0
+
+    if label.startswith("E") and "_G" in label:
+        try:
+            return int(label.split("_G")[1])
+        except Exception:
+            return None
+
+    try:
+        return int(label)
+    except Exception:
+        return None
 
 
 def predict_any(
@@ -555,9 +665,10 @@ def predict_any(
     tau_override: float | None,
 ) -> ModelPrediction:
     track = loaded["track"]
+    mode = artifact_preprocess_mode(loaded, preprocess_mode)
 
     if track == "classic":
-        proc_sc = preprocess_multichannel(raw_window_sc, fs=fs, mode=preprocess_mode)
+        proc_sc = preprocess_multichannel(raw_window_sc, fs=fs, mode=mode)
         return predict_classic(
             loaded=loaded,
             processed_window_sc=proc_sc,
@@ -570,7 +681,7 @@ def predict_any(
             loaded=loaded,
             raw_window_sc=raw_window_sc,
             fs=fs,
-            preprocess_mode=preprocess_mode,
+            preprocess_mode=mode,
             tau_override=tau_override,
         )
 
@@ -582,24 +693,11 @@ def predict_any(
             fs=fs,
             window_ms=window_ms,
             hop_ms=hop_ms,
-            preprocess_mode=preprocess_mode,
+            preprocess_mode=mode,
             tau_override=tau_override,
         )
 
     raise ValueError(f"Unsupported track: {track}")
-
-
-def label_to_gesture_id(label: str) -> int | None:
-    if label.startswith("E") and "_G" in label:
-        try:
-            return int(label.split("_G")[1])
-        except Exception:
-            return None
-
-    try:
-        return int(label)
-    except Exception:
-        return None
 
 
 def build_history_df(
@@ -617,6 +715,12 @@ def build_history_df(
     win_len = int(fs * window_ms / 1000)
     hop_len = int(fs * hop_ms / 1000)
 
+    all_channel_cols = [c for c in df.columns if c.startswith("emg_ch")]
+    if not all_channel_cols:
+        all_channel_cols = [c for c in df.columns if c.startswith("emg_")]
+    if not all_channel_cols and "signal" in df.columns:
+        all_channel_cols = ["signal"]
+
     rnn_seq_lens = [
         int(loaded["artifact"].get("seq_length", 16))
         for loaded in loaded_artifacts.values()
@@ -628,20 +732,26 @@ def build_history_df(
 
     rows = []
     first_end = max(first_valid_end, end_idx - (n_windows - 1) * hop_len)
-    full_signal_sc = df[selected_channel_cols].to_numpy(dtype=np.float32)
 
     for idx in range(first_end, end_idx + 1, hop_len):
         start = idx - win_len + 1
         if start < 0:
             continue
 
-        raw_window_sc = df.iloc[start : idx + 1][selected_channel_cols].to_numpy(
-            dtype=np.float32
-        )
-
         row = {"timestamp_ms": float(df.iloc[idx]["timestamp_ms"])}
 
         for display_name, loaded in loaded_artifacts.items():
+            model_cols = artifact_selected_channel_cols(
+                loaded=loaded,
+                all_channel_cols=all_channel_cols,
+                fallback_channel_cols=selected_channel_cols,
+            )
+
+            raw_window_sc = df.iloc[start : idx + 1][model_cols].to_numpy(
+                dtype=np.float32
+            )
+            full_signal_sc = df[model_cols].to_numpy(dtype=np.float32)
+
             pred = predict_any(
                 loaded=loaded,
                 raw_window_sc=raw_window_sc,
@@ -663,14 +773,47 @@ def build_history_df(
     return pd.DataFrame(rows)
 
 
-def init_state(default_idx: int):
+def init_state(default_idx: int) -> None:
     if "playing" not in st.session_state:
         st.session_state.playing = False
     if "cursor_idx" not in st.session_state:
         st.session_state.cursor_idx = default_idx
 
 
-def main():
+def ground_truth_at_cursor(df: pd.DataFrame, end_idx: int) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+
+    if "restimulus" in df.columns:
+        stimulus = int(df.iloc[end_idx]["restimulus"])
+        out["restimulus"] = stimulus
+
+        if "exercise" in df.columns:
+            exercise = int(df.iloc[end_idx]["exercise"])
+            out["label"] = f"E{exercise}_G{stimulus}"
+        else:
+            out["label"] = str(stimulus)
+
+        if stimulus == 0:
+            out["control_label"] = "no_action"
+        else:
+            out["control_label"] = out["label"]
+
+    if "rerepetition" in df.columns:
+        out["rerepetition"] = int(df.iloc[end_idx]["rerepetition"])
+
+    if "subject" in df.columns:
+        out["subject"] = int(df.iloc[end_idx]["subject"])
+
+    if "exercise" in df.columns:
+        out["exercise"] = int(df.iloc[end_idx]["exercise"])
+
+    if "timestamp_ms" in df.columns:
+        out["timestamp_ms"] = float(df.iloc[end_idx]["timestamp_ms"])
+
+    return out
+
+
+def main() -> None:
     st.set_page_config(page_title="EMG Replay Dashboard", layout="wide")
     st.title("EMG replay dashboard")
 
@@ -726,6 +869,7 @@ def main():
             "Show panels",
             [
                 "Current predictions",
+                "Ground truth",
                 "Probabilities",
                 "Prediction history",
                 "Raw signal",
@@ -734,6 +878,7 @@ def main():
             ],
             default=[
                 "Current predictions",
+                "Ground truth",
                 "Probabilities",
                 "Prediction history",
             ],
@@ -803,23 +948,28 @@ def main():
     end_idx = st.session_state.cursor_idx
     start_idx = end_idx - win_len + 1
 
-    raw_window_sc = df.iloc[start_idx : end_idx + 1][selected_channel_cols].to_numpy(
-        dtype=np.float32
-    )
-    full_signal_sc = df[selected_channel_cols].to_numpy(dtype=np.float32)
-    processed_window_sc = preprocess_multichannel(
-        raw_window_sc,
-        fs=fs,
-        mode=preprocess_mode,
-    )
-
     predictions: dict[str, ModelPrediction] = {}
+    model_channel_cols: dict[str, list[str]] = {}
+
     for display_name, loaded in loaded_artifacts.items():
         try:
+            model_cols = artifact_selected_channel_cols(
+                loaded=loaded,
+                all_channel_cols=all_channel_cols,
+                fallback_channel_cols=selected_channel_cols,
+            )
+
+            model_channel_cols[display_name] = model_cols
+
+            raw_window_sc_model = df.iloc[start_idx : end_idx + 1][model_cols].to_numpy(
+                dtype=np.float32
+            )
+            full_signal_sc_model = df[model_cols].to_numpy(dtype=np.float32)
+
             pred = predict_any(
                 loaded=loaded,
-                raw_window_sc=raw_window_sc,
-                full_signal_sc=full_signal_sc,
+                raw_window_sc=raw_window_sc_model,
+                full_signal_sc=full_signal_sc_model,
                 end_idx=end_idx,
                 fs=fs,
                 window_ms=window_ms,
@@ -827,17 +977,29 @@ def main():
                 preprocess_mode=preprocess_mode,
                 tau_override=tau_override,
             )
+
             predictions[display_name] = pred
+
         except Exception as e:
             predictions[display_name] = ModelPrediction(
                 display_name=display_name,
-                track=loaded["track"],
+                track=loaded.get("track", "unknown"),
                 label=f"error: {e}",
                 confidence=None,
                 accepted=None,
                 latency_ms=0.0,
                 probs=None,
             )
+
+    raw_window_sc = df.iloc[start_idx : end_idx + 1][selected_channel_cols].to_numpy(
+        dtype=np.float32
+    )
+
+    processed_window_sc = preprocess_multichannel(
+        raw_window_sc,
+        fs=fs,
+        mode=preprocess_mode,
+    )
 
     if "Metadata" in visible_panels:
         m1, m2, m3, m4 = st.columns(4)
@@ -846,25 +1008,60 @@ def main():
         m3.metric("Timestamp (ms)", f"{df.iloc[end_idx]['timestamp_ms']:.1f}")
         m4.metric("Device", str(DEVICE))
 
+        st.write("Model channel usage:")
+        for name, cols in model_channel_cols.items():
+            st.write(f"{name}: {cols}")
+
+    if "Ground truth" in visible_panels:
+        st.subheader("Ground truth")
+
+        gt = ground_truth_at_cursor(df, end_idx)
+
+        if not gt:
+            st.info("No ground-truth columns found in this recording.")
+        else:
+            c1, c2, c3, c4 = st.columns(4)
+
+            c1.metric("Ground truth", gt.get("control_label", "unknown"))
+            c2.metric("Raw label", gt.get("label", "unknown"))
+            c3.metric("Repetition", gt.get("rerepetition", "unknown"))
+            c4.metric("Subject", gt.get("subject", "unknown"))
+
+            if "exercise" in gt:
+                st.caption(f"Exercise: {gt['exercise']}")
+
     if "Current predictions" in visible_panels:
         cols = st.columns(len(predictions))
         for col, (display_name, pred) in zip(cols, predictions.items()):
             with col:
                 st.subheader(display_name)
                 st.caption(pred.track.upper())
+
+                gt = ground_truth_at_cursor(df, end_idx)
+                gt_control_label = gt.get("control_label", None)
+
                 st.metric("Prediction", pred.label)
+
+                if gt_control_label is not None:
+                    is_correct = pred.label == gt_control_label
+                    st.metric("Correct", "Yes" if is_correct else "No")
+
                 if pred.confidence is not None:
                     st.metric("Confidence", f"{pred.confidence:.3f}")
+
                 if pred.accepted is not None:
                     st.metric("Accepted", "Yes" if pred.accepted else "No")
+
                 st.metric("Latency (ms)", f"{pred.latency_ms:.3f}")
 
     if "Probabilities" in visible_panels:
         st.subheader("Probabilities")
+
         prob_cols = st.columns(len(predictions))
         for col, (display_name, pred) in zip(prob_cols, predictions.items()):
             with col:
                 st.caption(display_name)
+
                 if pred.probs is None:
                     st.info("No probability output available.")
                 else:
@@ -875,8 +1072,18 @@ def main():
                         }
                     ).sort_values("probability", ascending=False)
 
-                    st.dataframe(prob_df, hide_index=True, width=True)
-                    st.bar_chart(prob_df.head(20).set_index("label"))
+                    prob_df["probability"] = prob_df["probability"].round(4)
+
+                    st.dataframe(
+                        prob_df,
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+
+                    st.bar_chart(
+                        prob_df.head(20).set_index("label"),
+                        use_container_width=True,
+                    )
 
     if "Prediction history" in visible_panels:
         st.subheader("Prediction history")
@@ -917,7 +1124,7 @@ def main():
                 st.dataframe(
                     hist_df[display_cols].tail(30),
                     hide_index=True,
-                    width=True,
+                    use_container_width=True,
                 )
 
     if "Raw signal" in visible_panels:
@@ -940,3 +1147,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
