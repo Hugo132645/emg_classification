@@ -188,7 +188,7 @@ def make_dataloaders_np(
     data_path: str,
     batch_size: int = 32,
     seq_length: int = 32,
-    seq_stride: int = 8,
+    seq_stride: int = 1,
     seed: int | None = None,
     drop_rest: bool = False,
     train_reps: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8),
@@ -217,19 +217,23 @@ def make_dataloaders_np(
     label_pairs = set()
 
     for csv_path in csv_files:
+        # For continuous robotic-arm training, do NOT drop rest here.
         x, raw_labels, rerepetition, subject, exercise = process_emg_for_windowing(
             str(csv_path),
-            drop_rest=drop_rest,
+            drop_rest=False,
         )
 
-        if np.any(raw_labels == 0):
-            print(f"Rest still present in {csv_path.name}")
+        if allowed_exercises is not None and int(exercise) not in allowed_exercises:
+            continue
 
         if selected_channels is not None:
             x = x[:, list(selected_channels)]
 
-        if allowed_exercises is not None and int(exercise) not in allowed_exercises:
-            continue
+        if not include_rest:
+            keep = raw_labels != 0
+            x = x[keep]
+            raw_labels = raw_labels[keep]
+            rerepetition = rerepetition[keep]
 
         if len(x) == 0:
             continue
@@ -240,7 +244,7 @@ def make_dataloaders_np(
             lab = int(lab)
             if lab == 0 and not include_rest:
                 continue
-            label_pairs.add((exercise, lab))
+            label_pairs.add((int(exercise), lab))
 
     if not file_records:
         raise ValueError("No usable EMG")
@@ -249,112 +253,149 @@ def make_dataloaders_np(
     label_map = {pair: i for i, pair in enumerate(sorted_pairs)}
     label_names = [f"E{ex}_G{lab}" for ex, lab in sorted_pairs]
 
-    train_feature_blocks = []
-    train_label_blocks = []
-    val_feature_blocks = []
-    val_label_blocks = []
+    feature_blocks = []
+    label_blocks = []
+    rep_blocks = []
     ft_names = None
 
     min_len = int(sample_rate * cfg.window_ms / 1000)
 
     for csv_path, x, raw_labels, rerepetition, subject, exercise in file_records:
+        if len(x) < min_len:
+            continue
+
         global_labels = np.array(
-            [label_map[(exercise, int(lbl))] for lbl in raw_labels],
+            [label_map[(int(exercise), int(lbl))] for lbl in raw_labels],
             dtype=np.int64,
         )
 
-        for start, end, label_id, rep in _cont_runs(global_labels, rerepetition):
-            x_block = x[start:end]
-            y_block = global_labels[start:end]
+        windows, window_labels, _ = window_signal_np(
+            x=x,
+            fs=sample_rate,
+            window_ms=cfg.window_ms,
+            hop_ms=cfg.hop_ms,
+            labels=global_labels,
+        )
 
-            if len(x_block) < min_len:
-                continue
+        _, window_reps, _ = window_signal_np(
+            x=x[:, 0],
+            fs=sample_rate,
+            window_ms=cfg.window_ms,
+            hop_ms=cfg.hop_ms,
+            labels=rerepetition,
+        )
 
-            windows, window_labels, _ = window_signal_np(
-                x_block,
-                fs=sample_rate,
-                window_ms=cfg.window_ms,
-                hop_ms=cfg.hop_ms,
-                labels=y_block,
-            )
+        if len(windows) == 0:
+            continue
 
-            if len(windows) == 0:
-                continue
+        features, names = compute_seq_features(
+            windows=windows,
+            fs=sample_rate,
+            basic_feat=True,
+            shape_feat=True,
+            spectral_feat=True,
+            deltas=False,
+        )
 
-            features, names = compute_seq_features(
-                windows=windows,
-                fs=sample_rate,
-                basic_feat=True,
-                shape_feat=True,
-                spectral_feat=True,
-                deltas=False,
-            )
+        if ft_names is None:
+            ft_names = names
 
-            if ft_names is None:
-                ft_names = names
+        feature_blocks.append(features)
+        label_blocks.append(np.asarray(window_labels, dtype=np.int64))
+        rep_blocks.append(np.asarray(window_reps, dtype=np.int64))
 
-            window_labels = np.asarray(window_labels, dtype=np.int64)
+        print(
+            f"Loaded {csv_path.name}: subject={subject}, exercise={exercise}, "
+            f"windows={len(window_labels)}, labels={sorted(np.unique(window_labels).tolist())}, "
+            f"reps={sorted(np.unique(window_reps).tolist())}"
+        )
 
-            is_rest_block = int(raw_labels[start]) == 0
+    if not feature_blocks:
+        raise ValueError("No feature blocks were created.")
 
-            if is_rest_block:
-                if include_rest:
-                    if rng.rand() < rest_val_ratio:
-                        val_feature_blocks.append(features)
-                        val_label_blocks.append(window_labels)
-                    else:
-                        train_feature_blocks.append(features)
-                        train_label_blocks.append(window_labels)
-            elif rep in train_reps:
-                train_feature_blocks.append(features)
-                train_label_blocks.append(window_labels)
-            elif rep in val_reps:
-                val_feature_blocks.append(features)
-                val_label_blocks.append(window_labels)
+    # Fit standardizer only on training-target windows.
+    train_standardizer_rows = []
 
-    if not train_feature_blocks:
-        raise ValueError("No training windows were created.")
-    if not val_feature_blocks:
-        raise ValueError("No validation windows were created.")
+    for features, labels, reps in zip(feature_blocks, label_blocks, rep_blocks):
+        train_target_mask = np.isin(reps, train_reps)
 
-    std = Standardizer().fit(np.vstack(train_feature_blocks))
+        # Rest windows often have repetition 0. Keep some rest in training.
+        if include_rest:
+            rest_mask = labels == label_map.get((2, 0), -999999)
+            rest_train_mask = rest_mask & (rng.rand(len(labels)) >= rest_val_ratio)
+            train_target_mask = train_target_mask | rest_train_mask
 
-    train_datasets = [
-        FeatureSequenceDataset(
-            feature_vectors=F,
-            labels=y,
+        if np.any(train_target_mask):
+            train_standardizer_rows.append(features[train_target_mask])
+
+    if not train_standardizer_rows:
+        raise ValueError("No training windows available for standardizer.")
+
+    std = Standardizer().fit(np.vstack(train_standardizer_rows))
+
+    train_datasets = []
+    val_datasets = []
+
+    for features, labels, reps in zip(feature_blocks, label_blocks, rep_blocks):
+        dataset = FeatureSequenceDataset(
+            feature_vectors=features,
+            labels=labels,
             seq_len=seq_length,
             seq_stride=seq_stride,
             standardizer=std,
             device=None,
         )
-        for F, y in zip(train_feature_blocks, train_label_blocks)
-    ]
 
-    val_datasets = [
-        FeatureSequenceDataset(
-            feature_vectors=F,
-            labels=y,
-            seq_len=seq_length,
-            seq_stride=seq_stride,
-            standardizer=std,
-            device=None,
-        )
-        for F, y in zip(val_feature_blocks, val_label_blocks)
-    ]
+        train_indices = []
+        val_indices = []
+
+        # Dataset item i usually corresponds to a sequence starting at i * seq_stride.
+        # Target is normally the last label in the sequence.
+        for ds_idx in range(len(dataset)):
+            start = ds_idx * seq_stride
+            target_idx = start + seq_length - 1
+
+            if target_idx >= len(labels):
+                continue
+
+            target_label = int(labels[target_idx])
+            target_rep = int(reps[target_idx])
+
+            is_rest = label_names[target_label].endswith("_G0")
+
+            if is_rest and include_rest:
+                if rng.rand() < rest_val_ratio:
+                    val_indices.append(ds_idx)
+                else:
+                    train_indices.append(ds_idx)
+            elif target_rep in train_reps:
+                train_indices.append(ds_idx)
+            elif target_rep in val_reps:
+                val_indices.append(ds_idx)
+
+        if train_indices:
+            train_datasets.append(Subset(dataset, train_indices))
+
+        if val_indices:
+            val_datasets.append(Subset(dataset, val_indices))
+
+    if not train_datasets:
+        raise ValueError("No training sequences were created.")
+    if not val_datasets:
+        raise ValueError("No validation sequences were created.")
 
     train_dataset = ConcatDataset(train_datasets)
     vals_dataset = ConcatDataset(val_datasets)
 
-    # Collation into torch.tensors for training and validation
     def collate_fn(batch):
         return {
-            "x": torch.stack([b["x"] for b in batch], dim=0),  # [B, L, D]
-            "y_seq": torch.stack([b["y_seq"] for b in batch], dim=0),  # [B, L]
-            "y": torch.stack([b["y"] for b in batch], dim=0),  # [B]
+            "x": torch.stack([b["x"] for b in batch], dim=0),
+            "y_seq": torch.stack([b["y_seq"] for b in batch], dim=0),
+            "y": torch.stack([b["y"] for b in batch], dim=0),
             "length": torch.tensor(
-                [int(b["length"]) for b in batch], dtype=torch.long
-            ),  # [B]
+                [int(b["length"]) for b in batch],
+                dtype=torch.long,
+            ),
             "names": batch[0]["names"],
         }
 
@@ -364,6 +405,7 @@ def make_dataloaders_np(
         collate_fn=collate_fn,
         shuffle=True,
     )
+
     val_loader = DataLoader(
         vals_dataset,
         batch_size=batch_size,
@@ -371,8 +413,15 @@ def make_dataloaders_np(
         shuffle=False,
     )
 
-    input_dim = train_feature_blocks[0].shape[1]
+    input_dim = feature_blocks[0].shape[1]
     num_classes = len(label_map)
+
+    print("Continuous GRU dataset built")
+    print("Train sequences:", len(train_dataset))
+    print("Val sequences:", len(vals_dataset))
+    print("Input dim:", input_dim)
+    print("Num classes:", num_classes)
+    print("Label names:", label_names)
 
     return (
         train_loader,
@@ -485,6 +534,13 @@ def train_save_model(
     epochs=30,
     early_stopping_patience=8,
     save_dir="./artifacts",
+    seq_length=16,
+    seq_stride=1,
+    selected_channels=None,
+    allowed_exercises=None,
+    drop_rest=False,
+    include_rest=True,
+    preprocess_mode="none"
 ):
     criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -554,6 +610,13 @@ def train_save_model(
                 "standardizer_mean": std.mean_,
                 "standardizer_std": std.std_,
                 "best_val_acc": best_val_acc,
+                "seq_length": seq_length,
+                "seq_stride": seq_stride,
+                "selected_channels": selected_channels,
+                "allowed_exercises": allowed_exercises,
+                "drop_rest": drop_rest,
+                "include_rest": include_rest,
+                "preprocess_mode": preprocess_mode,
             }
 
             torch.save(artifact, best_model_path)
@@ -726,6 +789,13 @@ def predict_with_model(model, loader, device, label_names=None):
 if __name__ == "__main__":
     sd = 42
     config = load_cfg()
+    seq_length = 16
+    seq_stride = 1
+    selected_channels = (0, 1)
+    allowed_exercises = (2,)
+    drop_rest = False
+    include_rest = True
+    preprocess_mode = "none"
 
     (
         train_loader,
@@ -738,27 +808,29 @@ if __name__ == "__main__":
         label_map,
     ) = make_dataloaders_np(
         cfg=config,
-        data_path="/emg_classification/data/input_data/ninapro_db1/csv_files",
+        data_path="data/input_data/ninapro_db1/csv_files",
         batch_size=32,
-        seq_length=16,
-        seq_stride=16,
-        drop_rest=False,
+        seq_length=seq_length,
+        seq_stride=seq_stride,
+        include_rest=include_rest,
+        drop_rest=drop_rest,
         train_reps=(1, 2, 3, 4, 5, 6, 7, 8),
         val_reps=(9, 10),
         seed=sd,
-        allowed_exercises=(2,),
+        allowed_exercises=allowed_exercises,
+        selected_channels=selected_channels,
         rest_val_ratio=0.1,
     )
 
-    hidden_dim = 32
-    num_layers = 1
-    dropout = 0.4
-    lr = 1e-3
+    hidden_dim = 64
+    num_layers = 2
+    dropout = 0.2
+    lr = 5e-4
     weight_decay = 1e-4
-    epochs = 16
+    epochs = 30
 
-    lstm_model = build_model(
-        model_type="lstm",
+    gru_model = build_model(
+        model_type="gru",
         input_dim=input_dim,
         hidden_dim=hidden_dim,
         num_classes=num_classes,
@@ -767,8 +839,8 @@ if __name__ == "__main__":
         bidirectional=True,
     ).to(dvc)
 
-    lstm_model, history = train_save_model(
-        model=lstm_model,
+    gru_model, history = train_save_model(
+        model=gru_model,
         train_loader=train_loader,
         val_loader=val_loader,
         device=dvc,
@@ -778,7 +850,7 @@ if __name__ == "__main__":
         std=std,
         label_names=label_names,
         label_map=label_map,
-        model_type="lstm",
+        model_type="gru",
         hidden_dim=hidden_dim,
         num_layers=num_layers,
         dropout=dropout,
@@ -790,6 +862,13 @@ if __name__ == "__main__":
         epochs=epochs,
         early_stopping_patience=4,
         save_dir="./artifacts",
+        seq_length=seq_length,
+        seq_stride=seq_stride,
+        selected_channels=selected_channels,
+        allowed_exercises=allowed_exercises,
+        drop_rest=drop_rest,
+        include_rest=include_rest,
+        preprocess_mode=preprocess_mode,
     )
 
     print("Best model path:", history["best_model_path"])

@@ -4,16 +4,14 @@ scipy>=1.8
 # Only if you must run on Python < 3.8 (for Literal support):
 typing_extensions>=4.6 ; python_version < "3.8"
 #dummy_data.py + windowing.py
-scipy>=1.15.3
 #eed_loader.py
 mne>=1.12.1
 
 #Base requirements
-numpy==1.24.4
+numpy==1.26.4
 pandas==2.2.2
 pyarrow==16.1.0
-scipy==1.11.4
-scikit-learn==1.4.2
+scikit-learn>=1.6.1
 matplotlib==3.8.4
 librosa==0.10.1
 torch==2.2.2

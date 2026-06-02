@@ -21,6 +21,7 @@ from src.cnn.models.model_cnn import EMGConvNet
 from src.rnn.features.seq_features import compute_seq_features
 from src.rnn.models.model_rnn import GRUModel, LSTMModel
 
+
 RECORDING_ROOTS = [
     Path("data/raw"),
     Path("data/input_data"),
@@ -42,7 +43,7 @@ RNN_ARTIFACT_ROOTS = [
     Path("artifacts"),
 ]
 
-DEFAULT_HISTORY_WINDOWS = 25
+DEFAULT_HISTORY_WINDOWS = 100
 CLASSIC_FEATURES_PER_CHANNEL = 20
 
 DEVICE = torch.device(
@@ -149,6 +150,7 @@ def load_classic_artifact(path: str) -> dict[str, Any]:
 def load_cnn_artifact(path: str) -> dict[str, Any]:
     checkpoint = torch.load(path, map_location=DEVICE)
     num_classes = int(checkpoint["num_classes"])
+
     model = EMGConvNet(num_classes=num_classes, dropout=0.3).to(DEVICE)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
@@ -176,7 +178,7 @@ def load_rnn_artifact(path: str) -> dict[str, Any]:
         model = GRUModel(
             input_dim=int(artifact["input_dim"]),
             hidden_dim=int(artifact["hidden_dim"]),
-            num_classes=len(artifact["label_map"]),
+            num_classes=int(artifact["num_classes"]),
             num_layers=int(artifact["num_layers"]),
             bidirectional=bool(artifact["bidirectional"]),
             dropout=float(artifact["dropout"]),
@@ -192,7 +194,16 @@ def load_rnn_artifact(path: str) -> dict[str, Any]:
     model.load_state_dict(artifact["state_dict"])
     model.eval()
 
-    inv_label_map = {int(v): str(k) for k, v in artifact["label_map"].items()}
+    if "label_names" in artifact:
+        inv_label_map = {
+            i: str(name)
+            for i, name in enumerate(artifact["label_names"])
+        }
+    else:
+        inv_label_map = {
+            int(v): f"E{k[0]}_G{k[1]}" if isinstance(k, tuple) else str(k)
+            for k, v in artifact["label_map"].items()
+        }
 
     return {
         "track": "rnn",
@@ -221,11 +232,18 @@ def preprocess_1d(x: np.ndarray, fs: int, mode: str) -> np.ndarray:
         return x
 
     if mode == "raw":
+        nyquist = fs / 2.0
+
+        if nyquist <= 20.0:
+            return x
+
+        high = min(450.0, nyquist * 0.95)
+
         y, _ = preprocess_raw(
             x,
             fs=fs,
             notch_50hz=False,
-            band=(20.0, 450.0),
+            band=(20.0, high),
             lp_cut=10.0,
             norm="zscore",
         )
@@ -246,17 +264,19 @@ def preprocess_1d(x: np.ndarray, fs: int, mode: str) -> np.ndarray:
 
 def preprocess_multichannel(x_sc: np.ndarray, fs: int, mode: str) -> np.ndarray:
     x_sc = np.asarray(x_sc, dtype=np.float32)
+
     if x_sc.ndim != 2:
         raise ValueError("Expected shape (samples, channels).")
 
     cols = []
     for ch in range(x_sc.shape[1]):
         cols.append(preprocess_1d(x_sc[:, ch], fs=fs, mode=mode))
+
     return np.stack(cols, axis=1)
 
 
 def classic_feature_row(processed_window_sc: np.ndarray, fs: int) -> np.ndarray:
-    win_batch = np.transpose(processed_window_sc, (1, 0))[None, :, :]  # (1, C, W)
+    win_batch = np.transpose(processed_window_sc, (1, 0))[None, :, :]
     x_time = td.extract_td_features_per_window(win_batch)
     x_freq = fd.extract_fd_features_per_window(win_batch, fs=fs)
     return np.hstack([x_time, x_freq]).astype(np.float32)
@@ -291,7 +311,7 @@ def cnn_input_tensor(processed_window_1d: np.ndarray, fs: int) -> torch.Tensor:
 
 
 def rnn_sequence_tensor(
-    signal_1d: np.ndarray,
+    signal_sc: np.ndarray,
     end_idx: int,
     fs: int,
     window_ms: int,
@@ -300,6 +320,11 @@ def rnn_sequence_tensor(
     preprocess_mode: str,
     loaded_rnn: dict[str, Any],
 ) -> torch.Tensor | None:
+    signal_sc = np.asarray(signal_sc, dtype=np.float32)
+
+    if signal_sc.ndim != 2:
+        raise ValueError("Expected signal shape (samples, channels).")
+
     win_len = int(fs * window_ms / 1000)
     hop_len = int(fs * hop_ms / 1000)
 
@@ -314,8 +339,8 @@ def rnn_sequence_tensor(
     windows = []
     for start in starts:
         end = start + win_len
-        w = signal_1d[start:end]
-        w = preprocess_1d(w, fs=fs, mode=preprocess_mode)
+        w = signal_sc[start:end, :]
+        w = preprocess_multichannel(w, fs=fs, mode=preprocess_mode)
         windows.append(w)
 
     windows = np.stack(windows, axis=0).astype(np.float32)
@@ -329,18 +354,20 @@ def rnn_sequence_tensor(
         deltas=False,
     )
 
+    expected_dim = int(loaded_rnn["artifact"]["input_dim"])
+    if feats.shape[1] != expected_dim:
+        raise ValueError(
+            f"RNN feature dimension mismatch: got {feats.shape[1]}, expected {expected_dim}. "
+            f"Selected channels probably do not match training."
+        )
+
     mean_ = np.asarray(loaded_rnn["artifact"]["standardizer_mean"], dtype=np.float32)
     std_ = np.asarray(loaded_rnn["artifact"]["standardizer_std"], dtype=np.float32)
     std_ = np.where(std_ < 1e-7, 1.0, std_)
+
     feats = (feats - mean_) / std_
 
     return torch.from_numpy(feats[None, :, :]).float().to(DEVICE)
-
-
-def aggregate_channel_probabilities(prob_list: list[np.ndarray]) -> np.ndarray:
-    if not prob_list:
-        raise ValueError("No probabilities to aggregate.")
-    return np.mean(np.stack(prob_list, axis=0), axis=0)
 
 
 def predict_classic(
@@ -353,11 +380,7 @@ def predict_classic(
     model = artifact["model"]
     gestures = list(artifact["gestures"])
     display_name = Path(artifact["path"]).stem
-    tau = (
-        artifact.get("no_action_threshold", 0.60)
-        if tau_override is None
-        else tau_override
-    )
+    tau = artifact.get("no_action_threshold", 0.60) if tau_override is None else tau_override
 
     expected_channels = expected_classic_channels(artifact)
     if expected_channels is not None:
@@ -433,7 +456,7 @@ def predict_cnn(
 
         prob_list.append(probs)
 
-    probs_mean = aggregate_channel_probabilities(prob_list)
+    probs_mean = np.mean(np.stack(prob_list, axis=0), axis=0)
     latency_ms = (time.perf_counter() - t0) * 1000.0
 
     pred_id = int(np.argmax(probs_mean))
@@ -468,49 +491,46 @@ def predict_rnn(
     display_name = Path(loaded["path"]).stem
     tau = 0.60 if tau_override is None else tau_override
 
-    seq_len = 32
-    prob_list = []
+    seq_len = int(loaded["artifact"].get("seq_length", 16))
     t0 = time.perf_counter()
 
-    for ch in range(full_signal_sc.shape[1]):
-        x = rnn_sequence_tensor(
-            signal_1d=full_signal_sc[:, ch],
-            end_idx=end_idx,
-            fs=fs,
-            window_ms=window_ms,
-            hop_ms=hop_ms,
-            seq_len=seq_len,
-            preprocess_mode=preprocess_mode,
-            loaded_rnn=loaded,
+    x = rnn_sequence_tensor(
+        signal_sc=full_signal_sc,
+        end_idx=end_idx,
+        fs=fs,
+        window_ms=window_ms,
+        hop_ms=hop_ms,
+        seq_len=seq_len,
+        preprocess_mode=preprocess_mode,
+        loaded_rnn=loaded,
+    )
+
+    if x is None:
+        return ModelPrediction(
+            display_name=display_name,
+            track="rnn",
+            label="not_enough_history",
+            confidence=None,
+            accepted=None,
+            latency_ms=0.0,
+            probs=None,
         )
 
-        if x is None:
-            return ModelPrediction(
-                display_name=display_name,
-                track="rnn",
-                label="not_enough_history",
-                confidence=None,
-                accepted=None,
-                latency_ms=0.0,
-                probs=None,
-            )
+    lengths = torch.tensor([seq_len], dtype=torch.long, device=DEVICE)
 
-        lengths = torch.tensor([seq_len], dtype=torch.long, device=DEVICE)
+    with torch.no_grad():
+        logits = model(x, lengths)
+        probs = F.softmax(logits, dim=1)[0].detach().cpu().numpy()
 
-        with torch.no_grad():
-            logits = model(x, lengths)
-            probs = F.softmax(logits, dim=1)[0].detach().cpu().numpy()
-
-        prob_list.append(probs)
-
-    probs_mean = aggregate_channel_probabilities(prob_list)
     latency_ms = (time.perf_counter() - t0) * 1000.0
 
-    pred_id = int(np.argmax(probs_mean))
-    confidence = float(np.max(probs_mean))
+    pred_id = int(np.argmax(probs))
+    confidence = float(np.max(probs))
     accepted = confidence >= tau
     label = inv_label_map[pred_id] if accepted else "no_action"
-    probs_out = {inv_label_map[i]: float(probs_mean[i]) for i in range(len(probs_mean))}
+    probs_out = {inv_label_map[i]: float(probs[i]) for i in range(len(probs))}
+    top3 = np.argsort(probs)[-3:][::-1]
+    print("RNN top3:", [(inv_label_map[int(i)], float(probs[int(i)])) for i in top3])
 
     return ModelPrediction(
         display_name=display_name,
@@ -569,6 +589,19 @@ def predict_any(
     raise ValueError(f"Unsupported track: {track}")
 
 
+def label_to_gesture_id(label: str) -> int | None:
+    if label.startswith("E") and "_G" in label:
+        try:
+            return int(label.split("_G")[1])
+        except Exception:
+            return None
+
+    try:
+        return int(label)
+    except Exception:
+        return None
+
+
 def build_history_df(
     loaded_artifacts: dict[str, dict[str, Any]],
     df: pd.DataFrame,
@@ -584,8 +617,17 @@ def build_history_df(
     win_len = int(fs * window_ms / 1000)
     hop_len = int(fs * hop_ms / 1000)
 
+    rnn_seq_lens = [
+        int(loaded["artifact"].get("seq_length", 16))
+        for loaded in loaded_artifacts.values()
+        if loaded.get("track") == "rnn"
+    ]
+
+    required_seq_len = max(rnn_seq_lens) if rnn_seq_lens else 1
+    first_valid_end = win_len - 1 + (required_seq_len - 1) * hop_len
+
     rows = []
-    first_end = max(win_len - 1, end_idx - (n_windows - 1) * hop_len)
+    first_end = max(first_valid_end, end_idx - (n_windows - 1) * hop_len)
     full_signal_sc = df[selected_channel_cols].to_numpy(dtype=np.float32)
 
     for idx in range(first_end, end_idx + 1, hop_len):
@@ -611,8 +653,10 @@ def build_history_df(
                 preprocess_mode=preprocess_mode,
                 tau_override=tau_override,
             )
-            row[f"{display_name}_label"] = pred.label  # type: ignore
-            row[f"{display_name}_confidence"] = pred.confidence  # type: ignore
+
+            row[f"{display_name}_label"] = pred.label
+            row[f"{display_name}_confidence"] = pred.confidence
+            row[f"{display_name}_gesture_id"] = label_to_gesture_id(pred.label)
 
         rows.append(row)
 
@@ -666,14 +710,16 @@ def main():
         selected_artifact_paths = st.multiselect(
             "Models",
             artifact_files,
-            default=artifact_files[: min(3, len(artifact_files))],
+            default=[artifact_files[-1]],
         )
         if not selected_artifact_paths:
             st.warning("Select at least one model.")
             return
 
         preprocess_mode = st.selectbox(
-            "Preprocess mode", ["none", "raw", "envelope"], index=0
+            "Preprocess mode",
+            ["none", "raw", "envelope"],
+            index=0,
         )
 
         visible_panels = st.multiselect(
@@ -699,7 +745,18 @@ def main():
             tau_override = st.slider("NO ACTION threshold", 0.0, 1.0, 0.60, 0.01)
 
         speed_hz = st.slider("Replay speed (windows/sec)", 1, 20, 5)
-        history_windows = st.slider("History windows", 5, 100, DEFAULT_HISTORY_WINDOWS)
+        history_windows = st.slider("History windows", 5, 300, DEFAULT_HISTORY_WINDOWS)
+
+        has_rnn_selected = any(
+            identify_artifact_type(path) == "rnn"
+            for path in selected_artifact_paths
+        )
+
+        rnn_seq_len_default = 16
+        rnn_min_idx = win_len - 1 + (rnn_seq_len_default - 1) * hop_len
+
+        min_valid_idx = rnn_min_idx if has_rnn_selected else win_len - 1
+        default_start_idx = min_valid_idx + history_windows * hop_len
 
         c1, c2, c3 = st.columns(3)
         if c1.button("Play"):
@@ -708,17 +765,19 @@ def main():
             st.session_state.playing = False
         if c3.button("Reset"):
             st.session_state.playing = False
-            st.session_state.cursor_idx = win_len - 1
+            st.session_state.cursor_idx = default_start_idx
             st.rerun()
 
-    init_state(win_len - 1)
-
     max_idx = len(df) - 1
+    default_start_idx = min(default_start_idx, max_idx)
+
+    init_state(default_start_idx)
+
     cursor_idx = st.sidebar.slider(
         "Position (sample index)",
-        min_value=win_len - 1,
+        min_value=min(min_valid_idx, max_idx),
         max_value=max_idx,
-        value=min(st.session_state.cursor_idx, max_idx),
+        value=min(max(st.session_state.cursor_idx, min_valid_idx), max_idx),
         step=hop_len,
     )
     st.session_state.cursor_idx = cursor_idx
@@ -749,7 +808,9 @@ def main():
     )
     full_signal_sc = df[selected_channel_cols].to_numpy(dtype=np.float32)
     processed_window_sc = preprocess_multichannel(
-        raw_window_sc, fs=fs, mode=preprocess_mode
+        raw_window_sc,
+        fs=fs,
+        mode=preprocess_mode,
     )
 
     predictions: dict[str, ModelPrediction] = {}
@@ -813,10 +874,13 @@ def main():
                             "probability": list(pred.probs.values()),
                         }
                     ).sort_values("probability", ascending=False)
-                    st.bar_chart(prob_df.set_index("label"))
+
+                    st.dataframe(prob_df, hide_index=True, width=True)
+                    st.bar_chart(prob_df.head(20).set_index("label"))
 
     if "Prediction history" in visible_panels:
         st.subheader("Prediction history")
+
         hist_df = build_history_df(
             loaded_artifacts=loaded_artifacts,
             df=df,
@@ -829,14 +893,32 @@ def main():
             tau_override=tau_override,
             n_windows=history_windows,
         )
-        if not hist_df.empty:
+
+        if hist_df.empty:
+            st.info("No prediction history available yet.")
+        else:
+            label_cols = [c for c in hist_df.columns if c.endswith("_label")]
             conf_cols = [c for c in hist_df.columns if c.endswith("_confidence")]
+            gesture_cols = [c for c in hist_df.columns if c.endswith("_gesture_id")]
+
+            st.write("History rows:", len(hist_df))
+
+            if gesture_cols:
+                st.write("Predicted class / gesture ID over time")
+                st.line_chart(hist_df.set_index("timestamp_ms")[gesture_cols])
+
             if conf_cols:
+                st.write("Confidence over time")
                 st.line_chart(hist_df.set_index("timestamp_ms")[conf_cols])
 
-            label_cols = [c for c in hist_df.columns if c.endswith("_label")]
             if label_cols:
-                st.dataframe(hist_df[["timestamp_ms"] + label_cols], width=True)
+                st.write("Recent predictions")
+                display_cols = ["timestamp_ms"] + label_cols + conf_cols
+                st.dataframe(
+                    hist_df[display_cols].tail(30),
+                    hide_index=True,
+                    width=True,
+                )
 
     if "Raw signal" in visible_panels:
         st.subheader("Raw window")

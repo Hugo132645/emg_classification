@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+from typing import Optional
 
 class GRUModel(nn.Module):
     def __init__(
@@ -25,7 +25,7 @@ class GRUModel(nn.Module):
         output_dim = hidden_dim * (2 if bidirectional else 1)
         self.fc = nn.Linear(output_dim, num_classes)
 
-    def forward(self, x: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, lengths: Optional[torch.Tensor] = None) -> torch.Tensor:
         out, hidden = self.gru(x)
 
         if lengths is None:
@@ -62,7 +62,7 @@ class LSTMModel(nn.Module):
         output_dim = hidden_dim * (2 if bidirectional else 1)
         self.fc = nn.Linear(output_dim, num_classes)
 
-    def forward(self, x: torch.Tensor, lengths: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, lengths: Optional[torch.Tensor] = None) -> torch.Tensor:
         out, hidden = self.lstm(x)
 
         if lengths is None:
