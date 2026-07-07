@@ -21,7 +21,6 @@ from src.cnn.models.model_cnn import EMGConvNet
 from src.rnn.features.seq_features import compute_seq_features
 from src.rnn.models.model_rnn import GRUModel
 
-
 RECORDING_ROOTS = [
     Path("data/raw"),
     Path("data/input_data"),
@@ -101,9 +100,7 @@ def load_recording(path: str, fs: int) -> tuple[pd.DataFrame, list[str]]:
                 df["sample_idx"].to_numpy(dtype=np.float64) / fs
             ) * 1000.0
         else:
-            df["timestamp_ms"] = (
-                np.arange(len(df), dtype=np.float64) / fs
-            ) * 1000.0
+            df["timestamp_ms"] = (np.arange(len(df), dtype=np.float64) / fs) * 1000.0
 
     return df.reset_index(drop=True), channel_cols
 
@@ -198,10 +195,7 @@ def load_rnn_artifact(path: str) -> dict[str, Any]:
     model.eval()
 
     if "label_names" in artifact:
-        inv_label_map = {
-            i: str(name)
-            for i, name in enumerate(artifact["label_names"])
-        }
+        inv_label_map = {i: str(name) for i, name in enumerate(artifact["label_names"])}
     else:
         inv_label_map = {
             int(v): f"E{k[0]}_G{k[1]}" if isinstance(k, tuple) else str(k)
@@ -451,7 +445,11 @@ def predict_classic(
     model = artifact["model"]
     gestures = list(artifact["gestures"])
     display_name = Path(artifact["path"]).stem
-    tau = artifact.get("no_action_threshold", 0.60) if tau_override is None else tau_override
+    tau = (
+        artifact.get("no_action_threshold", 0.60)
+        if tau_override is None
+        else tau_override
+    )
 
     expected_channels = expected_classic_channels(artifact)
     if expected_channels is not None:
@@ -488,10 +486,7 @@ def predict_classic(
         else:
             label = raw_label if accepted else "no_action"
 
-        probs_out = {
-            str(gestures[i]): float(probs[i])
-            for i in range(len(gestures))
-        }
+        probs_out = {str(gestures[i]): float(probs[i]) for i in range(len(gestures))}
     else:
         pred = model.predict(x_row)[0]
         try:
@@ -545,10 +540,7 @@ def predict_cnn(
     confidence = float(np.max(probs_mean))
     accepted = confidence >= tau
     label = class_names[pred_id] if accepted else "no_action"
-    probs_out = {
-        class_names[i]: float(probs_mean[i])
-        for i in range(len(class_names))
-    }
+    probs_out = {class_names[i]: float(probs_mean[i]) for i in range(len(class_names))}
 
     return ModelPrediction(
         display_name=display_name,
@@ -621,10 +613,7 @@ def predict_rnn(
     else:
         label = raw_label if accepted else "no_action"
 
-    probs_out = {
-        str(inv_label_map[i]): float(probs[i])
-        for i in range(len(probs))
-    }
+    probs_out = {str(inv_label_map[i]): float(probs[i]) for i in range(len(probs))}
 
     return ModelPrediction(
         display_name=display_name,
@@ -738,7 +727,7 @@ def build_history_df(
         if start < 0:
             continue
 
-        row = {"timestamp_ms": float(df.iloc[idx]["timestamp_ms"])}
+        row: dict[str, Any] = {"timestamp_ms": float(df.iloc[idx]["timestamp_ms"])}
 
         for display_name, loaded in loaded_artifacts.items():
             model_cols = artifact_selected_channel_cols(
@@ -893,8 +882,7 @@ def main() -> None:
         history_windows = st.slider("History windows", 5, 300, DEFAULT_HISTORY_WINDOWS)
 
         has_rnn_selected = any(
-            identify_artifact_type(path) == "rnn"
-            for path in selected_artifact_paths
+            identify_artifact_type(path) == "rnn" for path in selected_artifact_paths
         )
 
         rnn_seq_len_default = 16
@@ -1147,4 +1135,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
