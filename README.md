@@ -344,7 +344,21 @@ This allows all model tracks to use the same segmentation strategy.
 
 ### 1. Classic Machine Learning
 
-The classic ML pipeline uses hand-crafted features extracted from each EMG window.
+The classic ML track treats each EMG window as a structured feature vector and trains lightweight supervised models on top of those descriptors. It is currently the most stable baseline on `main` and serves as the clearest interpretable reference point for the rest of the project.
+
+```text
+Windowed EMG signal
+        ↓
+Time-domain + frequency-domain feature extraction
+        ↓
+Feature scaling / preprocessing
+        ↓
+Classical classifier
+        ↓
+Gesture prediction
+```
+
+This modelling path is useful early in the project because it helps us validate data quality, feature separability, and class behavior before relying on heavier neural architectures.
 
 Typical time-domain features include:
 
@@ -374,7 +388,34 @@ Possible models:
 - Random Forest
 - Gradient Boosting / XGBoost
 
-This track is useful because it is interpretable, fast to train, and suitable as a baseline.
+Why this track matters:
+
+- Interpretable feature set and decision behavior
+- Fast training and iteration time
+- Strong baseline for comparing CNN and RNN/LSTM results
+- Useful for debugging data issues before deep learning experiments
+
+Current implementation status:
+
+- `main` contains the version adapted to the shared repository structure and currently works on dummy data for development, debugging, and visualization.
+- The branch `classicML_testing` contains an adapted version used to test on an online dataset that does **not** match the intended EMG data format of this repository.
+- That branch is intentionally kept separate from `main` so the core pipeline can stay aligned with the project's target data structure while the external dataset experiments remain isolated.
+
+Example outputs from the current Classic ML workflow:
+
+Random Forest confusion matrix:
+
+![Random Forest confusion matrix](assets/classic_ml/confusion_matrix_rf_1777802744.png)
+
+Feature-space projections:
+
+![t-SNE feature space 2D](assets/classic_ml/tsne_2d_1777802744.png)
+
+![t-SNE feature space 3D](assets/classic_ml/tsne_3d_1777802744.png)
+
+![UMAP feature space 2D](assets/classic_ml/umap_2d_1777802744.png)
+
+These visualizations show that the feature engineering pipeline already produces usable class structure, making the classic ML track a practical work-in-progress baseline while the neural tracks continue to mature.
 
 ---
 

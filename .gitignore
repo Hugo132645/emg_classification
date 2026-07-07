@@ -7,7 +7,6 @@ data/
 *.joblib
 *.json
 *.csv
-*.png
 
 # PYTHON COMPILED FILES
 __pycache__/
