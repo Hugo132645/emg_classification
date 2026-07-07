@@ -421,34 +421,219 @@ These visualizations show that the feature engineering pipeline already produces
 
 ### 2. CNN — Time-Frequency Classification
 
-The CNN track transforms biosignal windows into time-frequency representations such as spectrograms.
+The CNN track converts each windowed EMG segment into a log-mel spectrogram and classifies gestures with a lightweight 2D convolutional network. It is implemented across three files:
 
 ```text
-EMG Window
-   ↓
-Spectrogram / Scalogram
-   ↓
-CNN
-   ↓
+src/cnn/transforms/spectrograms.py   # Log-mel spectrogram computation (STFT + mel filterbank)
+src/cnn/datasets/cnn_dataset.py      # PyTorch Dataset wrapper around spectrogram arrays
+src/cnn/models/model_cnn.py          # EMGConvNet architecture
+src/cnn/models/train_cnn_dummy.py    # End-to-end training/evaluation pipeline
+```
+
+```text
+EMG Window (200 ms)
+        ↓
+Log-Mel Spectrogram (STFT → mel filterbank → log)
+        ↓
+SpectrogramDataset  (numpy → tensor, label encoding)
+        ↓
+EMGConvNet  (3 conv blocks → global average pool → FC)
+        ↓
 Intent Class
 ```
 
-This approach allows the model to learn spatial patterns in the time-frequency domain.
+This track lets the model learn directly from a time-frequency image of the signal instead of hand-crafted features, at the cost of needing more data and compute than the classic ML baselines.
 
-Potential architectures:
+---
 
-- Lightweight custom ConvNet
-- MobileNet-style compact CNN
-- CNN with global average pooling
+#### Spectrogram Generation
 
-Potential augmentations:
+The file `src/cnn/transforms/spectrograms.py` turns a 1D EMG window into a 2D log-mel spectrogram using `librosa`.
 
-- Additive noise
-- Time masking
-- Frequency masking
-- Small amplitude perturbations
+```python
+compute_stft_spectrogram(window, fs, n_fft=256, hop_length=128,
+                          n_mels=64, fmin=20.0, fmax=None, log_offset=1e-10)
+```
 
-This track is useful for learning signal patterns that may not be captured by hand-crafted features.
+Processing steps:
+
+1. **STFT** — `librosa.stft` with a Hann window, `n_fft=256`, `hop_length=128`.
+2. **Power spectrum** — squared magnitude of the complex STFT.
+3. **Mel filterbank** — `librosa.filters.mel(sr=fs, n_fft=256, n_mels=64, fmin=20.0, fmax=fs/2)` projects the linear-frequency power spectrum onto 64 mel bands.
+4. **Log compression** — `log(mel_power + 1e-10)` to keep dynamic range CNN-friendly.
+
+`batch_compute_spectrograms(windows, fs, ...)` loops this over an array of windows and stacks the result into a single `(N, n_mels, time_frames)` array — this is the function the training script calls once per dataset.
+
+| Parameter | Value used in `train_cnn_dummy.py` | Meaning |
+|---|---:|---|
+| `n_fft` | 256 | FFT size per STFT frame |
+| `hop_length` | 128 | Samples between STFT frames (spectrogram time resolution) |
+| `n_mels` | 64 | Number of mel frequency bins |
+| `fmin` / `fmax` | 20 Hz / 500 Hz | Mel filterbank frequency range |
+
+> **Requires `fs ≈ 1000 Hz`.** With a 200-sample window (200 ms @ 1 kHz) and `hop_length=128`, this configuration produces spectrograms of shape `(64, 2)` — 64 mel bins by 2 time frames. See [Reproducibility Notes](#reproducibility-notes-cnn) below for why the sample rate matters and what happens if it isn't 1 kHz.
+
+---
+
+#### CNN Dataset
+
+`src/cnn/datasets/cnn_dataset.py` defines `SpectrogramDataset`, a thin `torch.utils.data.Dataset` wrapper:
+
+```python
+dataset = SpectrogramDataset(spectrograms, labels, cfg)   # spectrograms: (N, n_mels, T) float array
+spec_tensor, label_idx = dataset[0]                        # (1, n_mels, T) tensor, int label
+weights = dataset.compute_class_weights()                  # inverse-frequency weights, for nn.CrossEntropyLoss(weight=...)
+train_ds, val_ds = train_val_split(dataset, train_ratio=0.8, seed=42)
+```
+
+| Output | Meaning |
+|---|---|
+| `spec_tensor` | `(1, n_mels, time_frames)` — a channel dimension is added so 2D convolutions treat the spectrogram like a single-channel image |
+| `label_idx` | Integer class index, taken from `cfg.label_map` (e.g. `{'rest': 0, 'fist': 1, 'open': 2, 'pinch': 3}`) |
+
+`compute_class_weights()` returns `N / (num_classes * count_i)` per class, for use with a weighted cross-entropy loss on imbalanced gesture distributions. `train_val_split()` shuffles indices with a fixed seed and splits by ratio, rebuilding two `SpectrogramDataset` instances from the resulting subsets.
+
+---
+
+#### Model Architecture — `EMGConvNet`
+
+`src/cnn/models/model_cnn.py` defines a lightweight ConvNet sized for small spectrograms and CPU training:
+
+```text
+Input: (B, 1, n_mels, time_frames)
+├─ ConvBlock1:  1 →  32 channels, 3×3 conv, BatchNorm, ReLU, MaxPool 2×2
+├─ ConvBlock2: 32 →  64 channels, 3×3 conv, BatchNorm, ReLU, NO pooling
+├─ ConvBlock3: 64 → 128 channels, 3×3 conv, BatchNorm, ReLU, NO pooling
+├─ Global Average Pooling → (B, 128)
+├─ Dropout (p=0.3)
+└─ Fully Connected: 128 → num_classes
+```
+
+Design notes (from the source):
+
+- **Only the first block pools.** Spectrograms this small (as narrow as 2 time frames) collapse to zero spatial size if every block pools; blocks 2 and 3 use `pool_size=1` (no-op pooling) to preserve spatial dimensions.
+- **Global average pooling** before the classifier makes the network agnostic to the exact `(n_mels, time_frames)` shape, so it tolerates windows of slightly different length.
+- **BatchNorm + ReLU** in every block; conv layers use `bias=False` since BatchNorm makes the bias redundant.
+
+`model.extract_features(x)` returns the 128-dim pooled embedding before the classifier head, for embedding inspection (e.g. t-SNE) if needed later.
+
+For `num_classes=4` (rest / fist / open / pinch), the model measures at **93,412 trainable parameters** (~0.36 MB in float32) — see [Reproduced Results](#reproduced-results-cnn) for how this was measured.
+
+---
+
+#### Training Pipeline
+
+`src/cnn/models/train_cnn_dummy.py` runs the full pipeline end to end, on synthetic ("dummy") EMG data generated by `src/common/io/dummy_data.py`:
+
+```text
+Generate dummy EMG (60 s, 3 active gesture classes + rest)
+        ↓
+preprocess_raw(): bandpass(20–450 Hz) → rectify → lowpass(10 Hz) → z-score
+        ↓
+window_signal(): 200 ms windows, 100 ms hop, majority-vote labels
+        ↓
+batch_compute_spectrograms(): (N, 64, time_frames) log-mel spectrograms
+        ↓
+SpectrogramDataset + train_val_split(train_ratio=0.8)
+        ↓
+EMGConvNet training (CrossEntropyLoss, Adam)
+        ↓
+Validation metrics + confusion matrix
+        ↓
+Save best checkpoint + training curve / confusion matrix plots
+```
+
+| Setting | Value |
+|---|---:|
+| Epochs | 20 |
+| Batch size | 32 |
+| Learning rate | 0.001 (Adam) |
+| Train / val split | 80% / 20% |
+| Seed | 42 |
+| Device | CPU |
+| Dummy data duration | 60 s, 5 s gesture blocks |
+
+---
+
+#### Reproduced Results <a name="reproduced-results-cnn"></a>
+
+The numbers and figures below come from an actual execution of the pipeline above (`src/cnn/transforms/spectrograms.py`, `src/cnn/datasets/cnn_dataset.py`, `src/cnn/models/model_cnn.py`, `src/cnn/models/train_cnn_dummy.py`, imported and run unmodified), on synthetic EMG — **not** on real biosignal recordings. Treat these as a pipeline sanity-check, not a gesture-recognition accuracy claim.
+
+Run configuration: `seed=42`, `sample_rate_hz=1000` (see [Reproducibility Notes](#reproducibility-notes-cnn) for why the sample rate was overridden from the config file's default), `window_ms=200`, `hop_ms=100`, gestures = `rest, fist, open, pinch`.
+
+Environment: Python 3.11.7, `numpy==1.26.4`, `torch==2.9.1+cpu`, `librosa==0.11.0`, `scikit-learn==1.7.2`, `matplotlib==3.10.7`, `scipy==1.16.3`. The exact percentages below should reproduce closely with a fixed seed on these versions; minor floating-point/BLAS differences across platforms or library versions can shift them slightly.
+
+```text
+Windows generated:        599   (rest: 299, open: 150, pinch: 150, fist: 0 — see notes)
+Spectrogram shape:        (599, 64, 2)   — 64 mel bins × 2 time frames per window
+Train / val split:        479 / 120
+Model:                     EMGConvNet, 93,412 trainable parameters
+Training time:             ~3.0 s for 20 epochs (CPU)
+Best validation accuracy:  84.17% (epoch 13 of 20)
+Final validation macro-F1: 0.7725
+```
+
+Classification report (final epoch, validation set, `zero_division=0`):
+
+```text
+              precision    recall  f1-score   support
+
+        rest       0.97      0.97      0.97        64
+        fist       0.00      0.00      0.00         0
+        open       0.62      0.64      0.63        25
+       pinch       0.73      0.71      0.72        31
+
+    accuracy                           0.83       120
+   macro avg       0.58      0.58      0.58       120
+weighted avg       0.83      0.83      0.83       120
+```
+
+The `fist` row has zero support: with `seed=42`, none of the twelve 5-second blocks drawn for this 60-second run happened to be labelled `fist`, so the class is absent from the entire dataset, not just the validation split. This is a property of the random block sampler in `generate_dummy_emg` over a short 60 s draw, not a training failure — macro-F1 is computed over all four configured classes regardless.
+
+<p align="center">
+  <img src="assets/cnn/training_curves.png" alt="CNN training and validation loss/accuracy curves" width="800">
+</p>
+<p align="center"><em>Training/validation loss and accuracy over 20 epochs.</em></p>
+
+<p align="center">
+  <img src="assets/cnn/confusion_matrix.png" alt="CNN validation confusion matrix" width="550">
+</p>
+<p align="center"><em>Validation confusion matrix (rest / fist / open / pinch). Rest is separated cleanly; open and pinch are the main source of confusion, consistent with both being lower-amplitude, adjacent gesture classes in the synthetic generator.</em></p>
+
+---
+
+#### Spectrogram Examples
+
+<p align="center">
+  <img src="assets/cnn/spectrogram_gallery_per_class.png" alt="Log-mel spectrograms per gesture class, raw vs preprocessed" width="850">
+</p>
+<p align="center"><em>Log-mel spectrograms of one representative 5-second gesture block per class, computed with <code>compute_stft_spectrogram</code> (fs=1000 Hz, n_fft=256, hop=128, n_mels=64). Left column: spectrogram of the raw synthetic EMG. Right column: spectrogram of the same block after the pipeline's bandpass → rectify → lowpass(10 Hz) → z-score preprocessing.</em></p>
+
+<p align="center">
+  <img src="assets/cnn/model_input_spectrograms.png" alt="Actual (64, 2) CNN input spectrograms per class" width="850">
+</p>
+<p align="center"><em>The actual tensors the CNN sees: one 200 ms window per class, shape (64 mel bins, 2 time frames) — this is the true input resolution of <code>EMGConvNet</code> under the current windowing configuration.</em></p>
+
+**What the preprocessed spectrograms show.** After `preprocess_raw`'s lowpass at 10 Hz, almost all remaining signal energy sits below the mel filterbank's 20 Hz floor, so the classifier is not looking at raw EMG frequency content (20–450 Hz muscle activation spectrum) in these spectrograms — it is looking at how the low-frequency envelope leaks into the lowest mel bins, and how that leakage is modulated in time as the synthetic gesture bursts turn on and off. This is a legitimate, learnable signal (it is what separates the classes above chance), but it should not be read as "the CNN sees EMG frequency content" — see the note below.
+
+This was checked quantitatively, not just visually: the 4th-order Butterworth lowpass at 10 Hz used in `preprocess_raw` attenuates by **−24 dB at 20 Hz**, **−56 dB at 50 Hz**, and **−184 dB at 450 Hz** (computed via `scipy.signal.freqz`). By the time a signal reaches the mel filterbank's 20 Hz floor, over 99.5% of its power (in linear terms, a gain of ≈0.06) has already been removed, and content near the bandpass's original 450 Hz edge is gone entirely.
+
+---
+
+#### Reproducibility Notes <a name="reproducibility-notes-cnn"></a>
+
+Two implementation details had to be worked around to get an end-to-end run out of the current code, and are recorded here rather than silently patched:
+
+1. **Sample rate / bandpass mismatch.** `configs/preprocessing.yaml` currently sets `sample_rate_hz: 100`, but `train_cnn_dummy.py` preprocesses with a fixed `band=(20, 450)` Hz Butterworth bandpass. A bandpass filter requires `high < Nyquist = fs/2`; at `fs=100 Hz` the Nyquist frequency is 50 Hz, so `high=450` is invalid and `preprocess_raw` raises `ValueError: Invalid bandpass... Ensure 0 < low < high < fs/2`. The spectrogram module's own docstrings/self-tests and `src/cnn/README.md` both assume `fs=1000 Hz` ("200 samples @ 1kHz"), so the results above were produced with `sample_rate_hz` overridden to `1000` on the config object passed into the pipeline. Nothing else was changed. Before running the CNN track from `configs/preprocessing.yaml` as-is, either raise `sample_rate_hz` to something compatible with a 450 Hz bandpass edge (≥ ~1000 Hz), or lower the bandpass/window parameters to match a 100 Hz signal.
+2. **`train_val_split` reloads config from a relative path.** `src/cnn/datasets/cnn_dataset.py`'s `train_val_split()` always calls `SpectrogramDataset(..., cfg=None, ...)`, which makes the dataset reload configuration via `load_cfg("configs/preprocessing.yaml")` — a path relative to the current working directory, not the repo root. If the training script is invoked from any directory other than the project root, this silently falls back to the hardcoded defaults in `schemas.py` (which have no `label_map`/`gestures`), and raises `AttributeError: 'SimpleNamespace' object has no attribute 'label_map'`. Run training scripts from the repository root until this is fixed.
+3. **`n_fft=256` on a 200-sample window.** `librosa` emits `UserWarning: n_fft=256 is too large for input signal of length=200` for every window, since the FFT size exceeds the window length. `librosa` zero-pads internally so the call still succeeds, but it means part of each spectrogram's frequency resolution is coming from zero-padding rather than real samples — worth reducing `n_fft` (e.g. to 128 or 64) if this is revisited.
+4. **Dummy data only.** All figures and metrics above come from `generate_dummy_emg`'s synthetic, band-limited noise bursts, not from recorded EMG. They validate that the spectrogram → dataset → model → training loop runs correctly and can separate synthetic classes above chance; they say nothing about real-world gesture classification accuracy.
+
+---
+
+#### Why This Track Matters
+
+The CNN track is useful because it removes the need to hand-design frequency-domain descriptors: the mel filterbank and convolutional layers learn which time-frequency patterns are discriminative directly from data, rather than relying on the fixed feature set used by the classic ML track. Its main current limitation is upstream of the model — the shared preprocessing pipeline low-pass filters the signal to a 10 Hz envelope before the spectrogram is computed, which limits how much genuine EMG spectral information (as opposed to envelope-modulation timing) the CNN actually has access to. Feeding the CNN track a less aggressively low-passed signal — e.g. the rectified, band-passed signal without the 10 Hz envelope step — is the most direct way to let it exploit real time-frequency muscle-activation structure once real EMG recordings are available.
 
 ---
 
