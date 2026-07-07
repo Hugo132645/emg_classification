@@ -379,7 +379,9 @@ def main():
         X, y, scaler = _build_dummy_dataset(cfg)
     else:
         print("\n[1] Building dataset from REAL EMG + preprocessing...")
-        X, y, scaler = _build_real_dataset(cfgsubject_id: str, session_date, session_id, channels)
+        X, y, scaler = _build_real_dataset(
+            cfg, subject_id, session_date, session_id, channels
+        )
     y, inv_map = _encode_labels(cfg, y)
     print("X shape:", X.shape)
     print("y shape:", y.shape)
