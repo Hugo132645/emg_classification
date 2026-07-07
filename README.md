@@ -42,7 +42,6 @@ The repository is organized around three complementary modelling tracks:
 - [Metrics](#metrics)
 - [Data Collection](#data-collection)
 - [Project Demo](#project-demo)
-- [Presentations](#presentations)
 - [Reproducibility](#reproducibility)
 - [Roadmap](#roadmap)
 - [Project Status](#project-status)
@@ -539,28 +538,6 @@ Suggested demo caption:
 
 ---
 
-## Presentations
-
-This project has been presented as part of research, innovation, and technology demonstrations.
-
-<p align="center">
-  <img src="assets/presentations/20260213_114047.jpg" alt="Project presentation booth" width="850">
-</p>
-
-<p align="center">
-  <em>Presenting the EEG/EMG prosthetic arm project at a public demonstration booth.</em>
-</p>
-
-The presentation setup included:
-
-- A prosthetic robotic arm prototype.
-- Biosignal-based intent classification concept.
-- Explanation of the EMG/EEG control pipeline.
-- Live discussion of the project architecture and future development.
-- Demonstration material for visitors and evaluators.
-
----
-
 ## Reproducibility
 
 For reproducible experiments, each run should save:
@@ -644,6 +621,14 @@ Main repository maintainer:
 ```text
 Hugo Arsénio
 GitHub: @Hugo132645
+```
+
+Team members:
+
+```md
+- Tudor-Andrei Dolineaschi — Classic ML
+- Maria Daria Dejeu — CNN
+- Norbert Ceaser — RNN/BRNN
 ```
 
 ---
