@@ -40,7 +40,6 @@ The repository is organized around three complementary modelling tracks:
 - [Modelling Tracks](#modelling-tracks)
 - [Evaluation Protocol](#evaluation-protocol)
 - [Metrics](#metrics)
-- [Data Collection](#data-collection)
 - [Project Demo](#project-demo)
 - [Reproducibility](#reproducibility)
 - [Roadmap](#roadmap)
