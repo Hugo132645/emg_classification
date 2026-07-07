@@ -21,7 +21,7 @@ The repository is organized around three complementary modelling tracks:
 </p>
 
 <p align="center">
-  <em>Project presentation and live demonstration booth.</em>
+  <em>Project presentation and live demonstration booth at WAICF, Cannes.</em>
 </p>
 
 ---
@@ -40,7 +40,6 @@ The repository is organized around three complementary modelling tracks:
 - [Modelling Tracks](#modelling-tracks)
 - [Evaluation Protocol](#evaluation-protocol)
 - [Metrics](#metrics)
-- [Data Collection](#data-collection)
 - [Project Demo](#project-demo)
 - [Reproducibility](#reproducibility)
 - [Roadmap](#roadmap)
@@ -414,25 +413,214 @@ This track is useful for learning signal patterns that may not be captured by ha
 
 ### 3. RNN / BRNN — Temporal Sequence Models
 
-The RNN track models temporal dependencies across multiple windows.
+The RNN track models **temporal dependencies across consecutive EMG windows**. Instead of treating each signal window as an isolated sample, this pipeline converts windowed EMG recordings into sequences of feature vectors and trains recurrent neural networks to classify the user's intended movement.
+
+This is especially relevant for prosthetic control because muscle activation patterns evolve over time. A single EMG window may be noisy or ambiguous, while a short sequence of windows can provide a clearer representation of the intended gesture.
 
 ```text
-Sequence of EMG Features
-          ↓
-RNN / GRU / LSTM / BiLSTM
-          ↓
-Intent Class
+Windowed EMG Signal
+        ↓
+Sequential Feature Extraction
+        ↓
+Feature Standardization
+        ↓
+FeatureSequenceDataset
+        ↓
+GRU / LSTM / Bidirectional Recurrent Model
+        ↓
+Intent Class Prediction
 ```
 
-Possible architectures:
+#### Sequence Feature Extraction
 
-- RNN
-- GRU
-- LSTM
-- Bidirectional LSTM
-- Optional attention layer
+The file `src/rnn/features/seq_features.py` contains the feature-extraction logic used before training the recurrent models.
 
-This track is useful for modelling movement dynamics over time rather than classifying each window independently.
+The function `compute_seq_features()` converts each EMG window into a compact numerical feature vector. These feature vectors are then arranged into temporal sequences for RNN-based classification.
+
+The current feature extraction supports multiple groups of descriptors:
+
+| Feature group | Description |
+|---|---|
+| Statistical features | Mean, standard deviation, minimum, maximum, range, and zero-crossing rate |
+| Shape-based features | Signal slope, skewness, and kurtosis-style descriptors |
+| Spectral features | Frequency-domain information such as centroid, bandwidth, and spectral power |
+
+In the RNN training pipeline, spectral features are enabled when the feature vectors are generated:
+
+```python
+ft_vectors, ft_names = compute_seq_features(
+    windows,
+    sample_rate,
+    spectral_feat=True
+)
+```
+
+This produces a feature matrix where each row corresponds to one EMG window and each column corresponds to a calculated feature.
+
+#### Sequence Dataset
+
+The file `src/rnn/datasets/sequence_dataset.py` defines the `FeatureSequenceDataset` class.
+
+This dataset groups consecutive EMG feature vectors into fixed-length temporal sequences. Each sequence becomes one training sample for the recurrent model.
+
+```text
+Feature vector 1
+Feature vector 2
+Feature vector 3
+...
+Feature vector N
+        ↓
+Sequence of consecutive feature vectors
+        ↓
+RNN input sample
+```
+
+Each dataset sample contains:
+
+| Output | Meaning |
+|---|---|
+| `x` | Input tensor with shape `[sequence_length, feature_dim]` |
+| `y_seq` | Labels for the windows inside the sequence |
+| `y` | Majority label for the sequence |
+| `length` | Actual sequence length |
+| `names` | Feature names used in the input vector |
+
+The current RNN training setup uses overlapping temporal sequences, allowing the model to learn how EMG features change over time.
+
+#### Feature Standardization
+
+Before training, the feature vectors are standardized using a custom `Standardizer`.
+
+Standardization transforms the input features so that each feature has a comparable scale:
+
+```text
+standardized_feature = (feature - mean) / standard_deviation
+```
+
+This is important because recurrent neural networks are sensitive to feature scale. Without standardization, features with larger numeric values can dominate the learning process.
+
+The trained model artifact stores the standardization parameters together with the model, making it possible to apply the same transformation later during inference.
+
+Stored metadata includes:
+
+```text
+standardizer_mean
+standardizer_std
+feature_names
+label_map
+```
+
+#### Recurrent Model Architecture
+
+The file `src/rnn/models/model_rnn.py` defines the recurrent model architectures used for temporal EMG classification.
+
+The main recurrent models are:
+
+| Model | Purpose |
+|---|---|
+| `GRUModel` | Gated Recurrent Unit model for temporal EMG classification |
+| `LSTMModel` | Long Short-Term Memory model for temporal EMG classification |
+
+The recurrent architecture follows this structure:
+
+```text
+Input sequence: [batch_size, sequence_length, feature_dim]
+        ↓
+GRU / LSTM recurrent layers
+        ↓
+Last valid hidden state
+        ↓
+Fully connected classification layer
+        ↓
+Class logits
+```
+
+The models support:
+
+- Configurable hidden dimension.
+- Multiple recurrent layers.
+- Dropout.
+- Optional bidirectional recurrent processing.
+- Variable sequence lengths through the `lengths` argument.
+
+The RNN track is therefore suitable for both simple temporal baselines and more advanced bidirectional sequence models.
+
+#### Training Pipeline
+
+The training script is located at:
+
+```text
+src/rnn/models/train_rnn.py
+```
+
+The script performs the complete RNN training workflow:
+
+```text
+Load preprocessing configuration
+        ↓
+Generate or load EMG data
+        ↓
+Apply shared windowing pipeline
+        ↓
+Extract sequential features
+        ↓
+Encode gesture labels
+        ↓
+Standardize feature vectors
+        ↓
+Build FeatureSequenceDataset
+        ↓
+Split into training and validation sets
+        ↓
+Train recurrent model
+        ↓
+Evaluate validation performance
+        ↓
+Save model artifact
+        ↓
+Generate training diagnostics
+```
+
+The training loop uses:
+
+- Cross-entropy loss.
+- Adam optimization.
+- Training and validation split.
+- Best-model checkpointing.
+- Validation accuracy tracking.
+- Confusion-matrix evaluation.
+
+The script also selects the best available compute device, supporting CPU, CUDA, and Apple Silicon acceleration where available.
+
+#### Output Artifact
+
+After training, the RNN pipeline saves a model artifact that contains both the trained weights and the metadata required for reuse.
+
+The saved artifact includes:
+
+```text
+state_dict
+model_type
+input_dim
+hidden_dim
+num_layers
+bidirectional
+dropout
+label_map
+feature_names
+standardizer_mean
+standardizer_std
+```
+
+This makes the trained model easier to reload for later testing, comparison, or future real-time prosthetic-arm inference.
+
+#### Why This Track Matters
+
+The RNN/BRNN track is important because prosthetic control is inherently temporal. Muscle activation is not just defined by one instant of signal activity, but by the pattern of activation across time.
+
+Compared with classic machine learning, the recurrent approach can capture temporal movement dynamics. Compared with CNN-based spectrogram classification, it focuses directly on the evolution of extracted EMG features across consecutive windows.
+
+This makes the RNN/BRNN track a strong candidate for future real-time EEG/EMG prosthetic control, where stable and responsive intent prediction is essential.
 
 ---
 
@@ -468,45 +656,6 @@ Recommended metrics:
 | Throughput | Inference speed |
 
 The most important metric is **Macro-F1**, because prosthetic control requires reliable performance across all movement classes, not only the most frequent class.
-
----
-
-## Data Collection
-
-The project is designed around biosignal acquisition for prosthetic control.
-
-Example EMG setup:
-
-| Component | Example |
-|---|---|
-| EMG sensor | MyoWare 2.0 |
-| Microcontroller | Arduino / Teensy / ESP32 |
-| Sampling rate | 500 Hz to 1 kHz |
-| Signal type | Raw EMG or envelope |
-| Output format | Parquet / CSV |
-
-Example trial protocol:
-
-```text
-5 s rest
-↓
-Cue appears
-↓
-3 s gesture hold
-↓
-2 s relaxation
-↓
-Repeat for each class
-```
-
-Recommended protocol:
-
-- Multiple repetitions per gesture.
-- Multiple sessions per subject.
-- Consistent electrode placement.
-- Clear trial markers.
-- Rest periods to reduce fatigue.
-- Notes for sensor placement, noise, or failed trials.
 
 ---
 
