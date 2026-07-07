@@ -13,7 +13,7 @@ The project is built around a shared EMG data pipeline and three complementary m
 - **RNN / BRNN** — temporal sequence models for rolling EMG windows.
 
 <p align="center">
-  <img src="assets/presentations/project_presentation_booth.jpg" alt="Project presentation booth" width="850">
+  <img src="assets/presentations/20260213_114047.jpg" alt="Project presentation booth" width="850">
 </p>
 
 <p align="center"><em>Project presentation and live demonstration booth.</em></p>
