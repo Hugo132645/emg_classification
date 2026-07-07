@@ -19,7 +19,7 @@ from src.classic_ml.features import freq_domain as fd
 from src.cnn.transforms.spectrograms import batch_compute_spectrograms
 from src.cnn.models.model_cnn import EMGConvNet
 from src.rnn.features.seq_features import compute_seq_features
-from src.rnn.models.model_rnn import GRUModel
+from src.rnn.models.model_rnn import GRUModel, LSTMModel
 
 RECORDING_ROOTS = [
     Path("data/raw"),
@@ -171,23 +171,37 @@ def load_cnn_artifact(path: str) -> dict[str, Any]:
 
 @st.cache_resource(show_spinner=False)
 def load_rnn_artifact(path: str) -> dict[str, Any]:
-    artifact = torch.load(path, map_location=DEVICE)
-    model_type = str(artifact["model_type"]).lower()
+    try:
+        artifact = torch.load(path, map_location=DEVICE, weights_only=False)
+    except TypeError:
+        artifact = torch.load(path, map_location=DEVICE)
+
+    model_type = str(artifact["model_type"]).strip().lower()
+    if "num_classes" in artifact:
+        num_classes = int(artifact["num_classes"])
+    elif "label_names" in artifact:
+        num_classes = len(artifact["label_names"])
+    else:
+        num_classes = len(artifact["label_map"])
 
     if model_type == "gru":
         model = GRUModel(
             input_dim=int(artifact["input_dim"]),
             hidden_dim=int(artifact["hidden_dim"]),
-            num_classes=int(artifact["num_classes"]),
+            num_classes=num_classes,
             num_layers=int(artifact["num_layers"]),
             bidirectional=bool(artifact["bidirectional"]),
             dropout=float(artifact["dropout"]),
         ).to(DEVICE)
     elif model_type == "lstm":
-        raise RuntimeError(
-            "Current LSTMModel in the repo is not usable yet. "
-            "Use GRU artifacts or fix src/rnn/models/model_rnn.py first."
-        )
+        model = LSTMModel(
+            input_dim=int(artifact["input_dim"]),
+            hidden_dim=int(artifact["hidden_dim"]),
+            num_classes=num_classes,
+            num_layers=int(artifact["num_layers"]),
+            bidirectional=bool(artifact["bidirectional"]),
+            dropout=float(artifact["dropout"]),
+        ).to(DEVICE)
     else:
         raise ValueError(f"Unsupported RNN model_type: {model_type}")
 
