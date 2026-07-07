@@ -407,8 +407,6 @@ Current implementation status:
 
 Example outputs from the current Classic ML workflow:
 
-Random Forest confusion matrix:
-
 <p align="center">
   <img src="assets/classic_ml/confusion_matrix_rf_1777802744.png" alt="Random Forest confusion matrix" width="48%">
   <img src="assets/classic_ml/tsne_2d_1777802744.png" alt="t-SNE feature space 2D" width="48%">
