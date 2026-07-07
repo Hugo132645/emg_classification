@@ -49,8 +49,8 @@ def generate_dummy_emg(seconds, fs, classes, block_s=5, mode="raw", seed=None, c
         else:
 
             #Generating band-limited EMG_like bursts for a gesture block
-            low = max(10, freq - 20)
-            high = freq + 20
+            high = min(freq + 20, 0.45 * fs)
+            low = min(max(1.0, freq - 20), high * 0.5)
             sos = butter(4, [low / (fs / 2), high / (fs / 2)], btype='bandpass', output='sos')
             noise = np.random.randn(end_block - iterator)
             burst = sosfiltfilt(sos, noise)

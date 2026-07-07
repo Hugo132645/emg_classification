@@ -39,17 +39,18 @@ from src.common.io.schemas import (
     is_raw_mode,
 )
 from src.common.io.dummy_data import generate_dummy_emg
-from src.common.preprocessing.windowing import (
-    window_signal,
-    window_segment_multichannel,
-)
+from src.common.preprocessing.windowing import window_signal
 from src.classic_ml.datasets.classic_ml_dataset import build_classic_ml_dataset
 from src.common.preprocessing.pipelines import (
     preprocess_raw,
     preprocess_envelope,
 )
 from datetime import datetime
-from xgboost import XGBClassifier
+
+try:
+    from xgboost import XGBClassifier
+except ImportError:
+    XGBClassifier = None
 
 # Dummy data flag
 
@@ -378,7 +379,7 @@ def main():
         X, y, scaler = _build_dummy_dataset(cfg)
     else:
         print("\n[1] Building dataset from REAL EMG + preprocessing...")
-        X, y, scaler = _build_real_dataset(cfg)
+        X, y, scaler = _build_real_dataset(cfgsubject_id: str, session_date, session_id, channels)
     y, inv_map = _encode_labels(cfg, y)
     print("X shape:", X.shape)
     print("y shape:", y.shape)
@@ -420,7 +421,9 @@ def main():
             max_depth=None,
             random_state=0,
         ),
-        "xgboost": XGBClassifier(
+    }
+    if XGBClassifier is not None:
+        models["xgboost"] = XGBClassifier(
             n_estimators=300,
             max_depth=4,
             learning_rate=0.1,
@@ -429,8 +432,9 @@ def main():
             tree_method="hist",
             eval_metric="mlogloss",
             n_jobs=-1,
-        ),
-    }
+        )
+    else:
+        print("Skipping xgboost because it is not installed.")
     results: list[dict] = []
     best_name: str | None = None
     best_model = None
@@ -588,13 +592,13 @@ def main():
     # UMAP
     print("\n[7h] Plotting UMAP 2D feature space...")
     umap_path = Path(f"reports/{session_date}/online/umap_2d_{timestamp}.png")
-    plot_umap_2d(X, y, class_ids, class_names, umap_path)
-    print("Saved UMAP 2D plot to:", umap_path)
+    if plot_umap_2d(X, y, class_ids, class_names, umap_path):
+        print("Saved UMAP 2D plot to:", umap_path)
 
     print("\n[7h-3d] Plotting UMAP 3D feature space...")
     umap_3d_path = Path(f"reports/{session_date}/best/umap_3d_{timestamp}.png")
-    plot_umap_3d(X, y, class_ids, class_names, umap_3d_path)
-    print("Saved UMAP 3D plot to:", umap_3d_path)
+    if plot_umap_3d(X, y, class_ids, class_names, umap_3d_path):
+        print("Saved UMAP 3D plot to:", umap_3d_path)
 
     rejection_results = None
     rejection_results_path = None

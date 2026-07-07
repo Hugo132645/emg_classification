@@ -5,11 +5,15 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import umap
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.metrics import f1_score
 from src.common.io.schemas import ensure_parent_dir
+
+try:
+    import umap
+except ImportError:
+    umap = None
 
 
 def plot_confusion_matrix(
@@ -192,7 +196,11 @@ def plot_umap_2d(
     class_names,
     out_path: Path,
     random_state: int = 0,
-) -> None:
+) -> bool:
+    if umap is None:
+        print("Skipping UMAP 2D plot because umap-learn is not installed.")
+        return False
+
     reducer = umap.UMAP(
         n_components=2,
         n_neighbors=15,
@@ -218,6 +226,7 @@ def plot_umap_2d(
     ensure_parent_dir(str(out_path))
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
+    return True
 
 
 def plot_tsne_3d(
@@ -269,7 +278,11 @@ def plot_umap_3d(
     class_names,
     out_path: Path,
     random_state: int = 0,
-) -> None:
+) -> bool:
+    if umap is None:
+        print("Skipping UMAP 3D plot because umap-learn is not installed.")
+        return False
+
     reducer = umap.UMAP(
         n_components=3,
         n_neighbors=15,
@@ -303,3 +316,4 @@ def plot_umap_3d(
     ensure_parent_dir(str(out_path))
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
+    return True
