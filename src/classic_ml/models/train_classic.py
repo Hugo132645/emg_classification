@@ -582,7 +582,7 @@ def main():
 
     # t-SNE
     print("\n[7g] Plotting t-SNE 2D feature space...")
-    tsne_path = Path(f"reports/{session_date}/online/tsne_2d_{timestamp}.png")
+    tsne_path = Path(f"reports/{session_date}/best/tsne_2d_{timestamp}.png")
     plot_tsne_2d(X, y, class_ids, class_names, tsne_path)
     print("Saved t-SNE 2D plot to:", tsne_path)
 
@@ -593,7 +593,7 @@ def main():
 
     # UMAP
     print("\n[7h] Plotting UMAP 2D feature space...")
-    umap_path = Path(f"reports/{session_date}/online/umap_2d_{timestamp}.png")
+    umap_path = Path(f"reports/{session_date}/best/umap_2d_{timestamp}.png")
     if plot_umap_2d(X, y, class_ids, class_names, umap_path):
         print("Saved UMAP 2D plot to:", umap_path)
 
