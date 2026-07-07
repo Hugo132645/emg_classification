@@ -21,7 +21,7 @@ The repository is organized around three complementary modelling tracks:
 </p>
 
 <p align="center">
-  <em>Project presentation and live demonstration booth.</em>
+  <em>Project presentation and live demonstration booth at WAICF, Cannes.</em>
 </p>
 
 ---
