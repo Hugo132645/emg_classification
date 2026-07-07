@@ -110,69 +110,81 @@ The pipeline is designed to support both offline experimentation and future real
 ```text
 emg_classification/
 ├── configs/
-│   ├── preprocessing.yaml            # Sampling, filtering, windowing and normalization settings
-│   └── gestures.yaml                 # Gesture classes and trial protocol
+│   └── preprocessing.yaml              # Sampling, filtering, windowing and normalization settings
+│
+├── data/
+│   └── input_data/
+│       └── ninapro_db1/                # Local EMG dataset workspace
+│
+├── exports/
+│   ├── classic_ml/
+│   ├── classic_ml_best/
+│   ├── classic_ml_online/
+│   └── classic_ml_online_best/         # Saved model outputs and experiment artifacts
+│
+├── reports/
+│   └── <date>/
+│       ├── best/
+│       ├── online/
+│       └── rest/                       # Generated plots and evaluation visuals
 │
 ├── src/
 │   ├── common/
 │   │   ├── io/
-│   │   │   ├── schemas.py            # Shared constants, schemas and file patterns
-│   │   │   └── dummy_data.py         # Synthetic EMG generation for testing
-│   │   │
+│   │   │   ├── dummy_data.py           # Synthetic EMG generation for testing
+│   │   │   ├── emg_loader.py           # Data loading helpers
+│   │   │   └── schemas.py              # Shared constants and file patterns
 │   │   ├── preprocessing/
-│   │   │   ├── pipelines.py          # Raw/envelope preprocessing functions
-│   │   │   └── windowing.py          # Signal windowing and majority-label logic
-│   │   │
+│   │   │   ├── pipelines.py            # Raw/envelope preprocessing functions
+│   │   │   └── windowing.py            # Signal windowing and label aggregation
 │   │   └── utils/
-│   │       └── config.py             # YAML configuration loader
+│   │       └── config.py               # YAML configuration loader
 │   │
 │   ├── classic_ml/
-│   │   ├── features/
-│   │   │   ├── time_domain.py        # Time-domain EMG features
-│   │   │   └── freq_domain.py        # Frequency-domain EMG features
-│   │   │
 │   │   ├── datasets/
-│   │   │   └── classic_ml_dataset.py # Dataset preparation for classic ML
-│   │   │
-│   │   └── models/
-│   │       └── train_classic.py      # Classic ML training script
+│   │   │   └── classic_ml_dataset.py   # Feature-table dataset preparation
+│   │   ├── features/
+│   │   │   ├── freq_domain.py          # Frequency-domain EMG features
+│   │   │   └── time_domain.py          # Time-domain EMG features
+│   │   ├── models/
+│   │   │   ├── regularization_classic.py
+│   │   │   └── train_classic.py        # Classic ML training script
+│   │   └── utils/
+│   │       └── plots.py                # Classic ML visualization helpers
 │   │
 │   ├── cnn/
-│   │   ├── transforms/
-│   │   │   └── spectrograms.py       # Spectrogram generation
-│   │   │
 │   │   ├── datasets/
-│   │   │   └── cnn_dataset.py        # Dataset preparation for CNN models
-│   │   │
-│   │   └── models/
-│   │       ├── model_cnn.py          # CNN architecture
-│   │       └── train_cnn.py          # CNN training script
+│   │   │   └── cnn_dataset.py          # Dataset preparation for CNN models
+│   │   ├── models/
+│   │   │   ├── model_cnn.py            # CNN architecture
+│   │   │   └── train_cnn_dummy.py      # CNN training entrypoint
+│   │   ├── transforms/
+│   │   │   └── spectrograms.py         # Spectrogram generation
+│   │   ├── demo_spectrograms.py
+│   │   ├── example_simple.py
+│   │   └── test_spectrograms.py
 │   │
 │   └── rnn/
-│       ├── features/
-│       │   └── seq_features.py       # Sequence feature extraction
-│       │
 │       ├── datasets/
-│       │   └── sequence_dataset.py   # Dataset preparation for RNN models
-│       │
+│       │   └── sequence_dataset.py     # Dataset preparation for sequence models
+│       ├── features/
+│       │   └── seq_features.py         # Sequence feature extraction
 │       └── models/
-│           ├── model_rnn.py          # RNN / BRNN architecture
-│           └── train_rnn.py          # RNN training script
+│           ├── model_rnn.py            # RNN / LSTM model definition
+│           └── train_rnn.py            # RNN training script
 │
 ├── assets/
-│   ├── demo/
-│   │   ├── prosthetic_arm_demo.gif
-│   │   └── prosthetic_arm_demo_frame.jpg
-│   │
-│   └── presentations/
-│       └── 20260213_114047.jpg
+│   ├── classic_ml/                     # README figures for classic ML results
+│   ├── cnn/                            # README figures for CNN results
+│   └── presentations/                  # Presentation and project media
 │
+├── streamlit_app.py                    # Streamlit interface for demos and model interaction
 ├── requirements.txt
 ├── LICENSE
 └── README.md
 ```
 
-The repository currently contains the main project folders `configs`, `src`, `requirements.txt`, `LICENSE`, and `README.md`. The `assets/` folder can be added to include photos, demo GIFs, and presentation material.
+The repository now includes source code, a Streamlit app entrypoint, local dataset workspace folders, generated experiment outputs, and tracked visual assets used throughout the documentation.
 
 ---
 
@@ -360,40 +372,32 @@ Gesture prediction
 
 This modelling path is useful early in the project because it helps us validate data quality, feature separability, and class behavior before relying on heavier neural architectures.
 
-Typical time-domain features include:
+Typical feature families used in this pipeline:
 
-- RMS — Root Mean Square
-- MAV — Mean Absolute Value
-- Standard deviation
-- Variance
-- Waveform length
-- Zero crossings
-- Slope sign changes
-- Willison amplitude
-- Hjorth parameters
-- Autoregressive coefficients
+| Feature Domain | Example Features | Why They Help |
+| --- | --- | --- |
+| Time-domain | RMS, MAV, standard deviation, variance | Captures amplitude and signal energy changes |
+| Signal-shape | Waveform length, zero crossings, slope sign changes, Willison amplitude | Describes local movement patterns and activation changes |
+| Descriptive / parametric | Hjorth parameters, autoregressive coefficients | Summarizes signal complexity and compact temporal behavior |
+| Frequency-domain | Welch PSD, mean frequency, median frequency, band powers, spectral entropy | Captures spectral distribution and muscle activation characteristics |
 
-Typical frequency-domain features include:
+Candidate models in the classic ML track:
 
-- Welch power spectral density
-- Mean frequency
-- Median frequency
-- Band powers
-- Spectral entropy
-
-Possible models:
-
-- Logistic Regression
-- Support Vector Machine
-- Random Forest
-- Gradient Boosting / XGBoost
+| Model | Strength | Typical Role in This Project |
+| --- | --- | --- |
+| Logistic Regression | Simple and interpretable | Quick linear baseline |
+| Support Vector Machine | Strong performance on structured feature spaces | Mid-complexity classifier baseline |
+| Random Forest | Robust and easy to inspect | Current strong classical baseline |
+| Gradient Boosting / XGBoost | Handles nonlinear decision boundaries well | Higher-capacity classic model for comparison |
 
 Why this track matters:
 
-- Interpretable feature set and decision behavior
-- Fast training and iteration time
-- Strong baseline for comparing CNN and RNN/LSTM results
-- Useful for debugging data issues before deep learning experiments
+| Advantage | Value to the Project |
+| --- | --- |
+| Interpretability | Makes it easier to understand which signal characteristics drive predictions |
+| Fast iteration | Lets us test preprocessing and labeling assumptions quickly |
+| Reliable baseline | Gives the CNN and RNN/LSTM tracks a grounded benchmark |
+| Debugging utility | Helps surface data quality or feature-separation problems early |
 
 Current implementation status:
 
@@ -405,15 +409,21 @@ Example outputs from the current Classic ML workflow:
 
 Random Forest confusion matrix:
 
-![Random Forest confusion matrix](assets/classic_ml/confusion_matrix_rf_1777802744.png)
+<p align="center">
+  <img src="assets/classic_ml/confusion_matrix_rf_1777802744.png" alt="Random Forest confusion matrix" width="48%">
+  <img src="assets/classic_ml/tsne_2d_1777802744.png" alt="t-SNE feature space 2D" width="48%">
+</p>
+<p align="center">
+  <em>Random Forest confusion matrix</em> &nbsp;&nbsp;&nbsp;&nbsp; <em>t-SNE feature space (2D)</em>
+</p>
 
-Feature-space projections:
-
-![t-SNE feature space 2D](assets/classic_ml/tsne_2d_1777802744.png)
-
-![t-SNE feature space 3D](assets/classic_ml/tsne_3d_1777802744.png)
-
-![UMAP feature space 2D](assets/classic_ml/umap_2d_1777802744.png)
+<p align="center">
+  <img src="assets/classic_ml/tsne_3d_1777802744.png" alt="t-SNE feature space 3D" width="48%">
+  <img src="assets/classic_ml/umap_2d_1777802744.png" alt="UMAP feature space 2D" width="48%">
+</p>
+<p align="center">
+  <em>t-SNE feature space (3D)</em> &nbsp;&nbsp;&nbsp;&nbsp; <em>UMAP feature space (2D)</em>
+</p>
 
 These visualizations show that the feature engineering pipeline already produces usable class structure, making the classic ML track a practical work-in-progress baseline while the neural tracks continue to mature.
 
