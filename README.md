@@ -259,98 +259,134 @@ Depending on your local implementation, configuration files in `configs/` should
 
 ## Biosignal Data Format
 
-The main data format is intended to be **Parquet**, with optional CSV exports for inspection.
+The repository uses **Parquet** as the main format for raw and processed EMG data, with optional CSV mirroring enabled in the configuration.
 
-Suggested raw-data path:
+The file paths are defined in `configs/preprocessing.yaml`:
 
 ```text
 data/raw/{subject_id}/{session_date}/session_{session_id}.parquet
+data/processed/{subject_id}/{session_date}/features_session_{session_id}_{timestamp}.parquet
 ```
 
-Suggested processed-data path:
+The current configuration is EMG-focused and expects:
 
 ```text
-data/processed/
+sample_rate_hz: 1000
+num_channels: 3
+gestures: rest, fist, open, pinch
+label_map: rest=0, fist=1, open=2, pinch=3
+mirror_csv: true
 ```
 
-Recommended columns:
+The shared schema and configuration helpers are implemented in:
 
-| Column | Type | Description |
-|---|---:|---|
-| `timestamp_ms` | `int64` | Timestamp in milliseconds |
-| `emg_ch1_raw` | `int16` / `float` | Raw EMG channel signal |
-| `emg_ch1_env` | `float32` | EMG envelope signal, if available |
-| `eeg_ch*_raw` | `float32` | Optional EEG channel values |
-| `label` | `string` | Gesture or intent class |
-| `subject_id` | `string` | Participant identifier |
-| `session_id` | `string` | Recording session identifier |
-| `trial_id` | `int` | Trial index |
-| `marker` | `int` | Optional cue or event marker |
-| `notes` | `string` | Optional recording notes |
-
-The current pipeline is EMG-centered, but the schema is written so that EEG channels can be added later.
+```text
+src/common/io/schemas.py
+```
 
 ---
 
 ## Signal Preprocessing
 
-The shared preprocessing layer is responsible for preparing raw biosignals before modelling.
+The shared preprocessing code is implemented in:
 
-For EMG, the expected preprocessing steps are:
+```text
+src/common/preprocessing/pipelines.py
+```
+
+The repository provides two preprocessing pipelines:
+
+```text
+preprocess_raw()
+preprocess_envelope()
+```
+
+`preprocess_raw()` applies the full raw EMG pipeline:
 
 ```text
 Raw EMG
   ↓
-Band-pass filtering
+Band-pass filter
   ↓
-Notch filtering
+Optional 50 Hz notch filter
   ↓
 Rectification
   ↓
-Envelope extraction
+Low-pass envelope smoothing
   ↓
 Normalization
-  ↓
-Windowing
 ```
 
-Typical EMG preprocessing operations include:
-
-- Band-pass filtering to isolate the useful EMG frequency range.
-- Optional notch filtering to reduce power-line noise.
-- Rectification to convert the signal into absolute amplitude.
-- Low-pass filtering to extract the muscle activation envelope.
-- Session-level normalization.
-- Sliding-window segmentation.
-
-The shared preprocessing functions are located in:
+The default raw EMG settings in the code are:
 
 ```text
-src/common/preprocessing/
+Band-pass: 20–450 Hz
+Low-pass after rectification: 10 Hz
+Normalization: z-score
+Optional notch: 50 Hz
+```
+
+`preprocess_envelope()` is used for envelope-like EMG signals and applies:
+
+```text
+Low-pass filter at 10 Hz
+  ↓
+Normalization
+```
+
+Both preprocessing functions preserve the input shape and return:
+
+```text
+processed_signal, metadata
 ```
 
 ---
 
 ## Windowing
 
-The windowing module converts continuous biosignals into fixed-length samples for model training.
-
-Typical configuration:
+Windowing is implemented in:
 
 ```text
-Window length: 200 ms
-Hop length:    100 ms
+src/common/preprocessing/windowing.py
 ```
 
-For each window, the pipeline returns:
+The default windowing settings come from `configs/preprocessing.yaml`:
 
 ```text
-windows   -> signal windows
-labels    -> majority label per window
-times_ms  -> start and end timestamp of each window
+window_ms: 200
+hop_ms: 100
 ```
 
-This allows all model tracks to use the same segmentation strategy.
+At the current sampling rate of `1000 Hz`, this corresponds to:
+
+```text
+Window length: 200 samples
+Hop length: 100 samples
+```
+
+The main windowing functions are:
+
+```text
+window_signal()
+window_signal_np()
+window_segment_multichannel()
+```
+
+`window_signal()` and `window_signal_np()` convert a continuous EMG signal into overlapping windows and return:
+
+```text
+windows
+window_labels
+times_ms
+```
+
+`window_segment_multichannel()` applies the same windowing logic across multiple EMG channels and returns windows with shape:
+
+```text
+[number_of_windows, window_length, number_of_channels]
+```
+
+This shared windowing layer is used to keep the Classic ML, CNN, and RNN/BRNN pipelines consistent.
 
 ---
 
