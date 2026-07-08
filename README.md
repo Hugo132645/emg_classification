@@ -1093,7 +1093,7 @@ Team members:
 ```md
 - Tudor-Andrei Dolineaschi — Classic ML
 - Maria Daria Dejeu — CNN
-- Norbert Ceaser — RNN/BRNN
+- Norbert Cesar — RNN/BRNN
 ```
 
 ---
