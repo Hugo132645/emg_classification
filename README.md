@@ -1180,14 +1180,13 @@ Planned and potential future improvements:
 
 - [ ] Add complete real-time serial data logger.
 - [ ] Add EEG channel support in the common schema.
-- [ ] Add multi-channel EMG support.
+- [x] Add multi-channel EMG support.
 - [ ] Add synchronized EEG/EMG acquisition.
 - [ ] Add live inference with rolling windows.
 - [ ] Export trained models to ONNX.
 - [ ] Benchmark inference latency on CPU and embedded hardware.
 - [ ] Integrate predictions with prosthetic arm control.
 - [ ] Add grip-force feedback.
-- [ ] Add more presentation photos and demo videos.
 - [ ] Improve cross-subject evaluation.
 - [ ] Add automated tests for preprocessing and windowing.
 
@@ -1216,7 +1215,19 @@ Not yet intended for:
 
 ## Team
 
-Project developed by students and researchers interested in:
+This project was developed within the neuroscience side of a broader EEG/EMG prosthetic arm initiative, in collaboration with the Robotics Team.
+
+<p align="center">
+  <img src="assets/team/robotics_neuroscience_team.jpg" alt="First photo of the Robotics Team and Neuroscience Team" width="850">
+</p>
+
+<p align="center">
+  <em>First photo of the Robotics Team and Neuroscience Team.</em>
+</p>
+
+The repository focuses mainly on the **Neuroscience Team** contribution: biosignal processing, EEG/EMG classification, and machine learning pipelines for prosthetic-arm control.
+
+Project areas:
 
 - Biosignal processing
 - Machine learning
@@ -1225,21 +1236,20 @@ Project developed by students and researchers interested in:
 - Prosthetic arm control
 - Human-machine interaction
 
-Main repository maintainer:
+Team lead and main repository maintainer:
 
 ```text
 Hugo Arsénio
 GitHub: @Hugo132645
 ```
 
-Team members:
+Neuroscience Team members:
 
-```md
-- Tudor-Andrei Dolineaschi — Classic ML
-- Maria Daria Dejeu — CNN
-- Norbert Cesar — RNN/BRNN
+```text
+Tudor-Andrei Dolineaschi — Classic ML
+Maria Daria Dejeu — CNN
+Norbert Cesar — RNN/BRNN
 ```
-
 ---
 
 ## License
