@@ -39,7 +39,10 @@ from src.common.io.schemas import (
     is_raw_mode,
 )
 from src.common.io.dummy_data import generate_dummy_emg
-from src.common.preprocessing.windowing import window_signal
+from src.common.preprocessing.windowing import (
+    window_signal,
+    window_segment_multichannel,
+)
 from src.classic_ml.datasets.classic_ml_dataset import build_classic_ml_dataset
 from src.common.preprocessing.pipelines import (
     preprocess_raw,
