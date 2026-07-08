@@ -50,7 +50,6 @@ def _compute_regularization_curves(X: np.ndarray, y: np.ndarray):
             C=1.0,
             solver="lbfgs",
             max_iter=2000,
-            multi_class="auto",
         ),
         "svm_linear": SVC(
             kernel="linear",
