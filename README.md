@@ -109,81 +109,53 @@ The pipeline is designed to support both offline experimentation and future real
 
 ## Repository Structure
 
+## Repository Structure
+
 ```text
 emg_classification/
+├── assets/
+│   ├── classic_ml/                     # Classic ML figures and README assets
+│   ├── cnn/                            # CNN figures and README assets
+│   ├── presentations/                  # Project presentation and demo media
+│   ├── rnn/                            # RNN/BRNN figures and README assets
+│   ├── streamlit/                      # Streamlit interface assets
+│   └── team/                           # Team photos
+│
 ├── configs/
-│   └── preprocessing.yaml              # Sampling, filtering, windowing and normalization settings
-│
-├── data/
-│   └── input_data/
-│       └── ninapro_db1/                # Local EMG dataset workspace
-│
-├── exports/
-│   ├── classic_ml/
-│   ├── classic_ml_best/
-│   ├── classic_ml_online/
-│   └── classic_ml_online_best/         # Saved model outputs and experiment artifacts
-│
-├── reports/
-│   └── <date>/
-│       ├── best/
-│       ├── online/
-│       └── rest/                       # Generated plots and evaluation visuals
+│   └── preprocessing.yaml              # Signal, windowing, labels, protocol, and path settings
 │
 ├── src/
 │   ├── common/
-│   │   ├── io/
-│   │   │   ├── dummy_data.py           # Synthetic EMG generation for testing
-│   │   │   ├── emg_loader.py           # Data loading helpers
-│   │   │   └── schemas.py              # Shared constants and file patterns
-│   │   ├── preprocessing/
-│   │   │   ├── pipelines.py            # Raw/envelope preprocessing functions
-│   │   │   └── windowing.py            # Signal windowing and label aggregation
-│   │   └── utils/
-│   │       └── config.py               # YAML configuration loader
+│   │   ├── io/                         # Data loading, dummy data, and shared schema helpers
+│   │   ├── preprocessing/              # Signal preprocessing and windowing utilities
+│   │   └── utils/                      # Configuration utilities
 │   │
 │   ├── classic_ml/
-│   │   ├── datasets/
-│   │   │   └── classic_ml_dataset.py   # Feature-table dataset preparation
-│   │   ├── features/
-│   │   │   ├── freq_domain.py          # Frequency-domain EMG features
-│   │   │   └── time_domain.py          # Time-domain EMG features
-│   │   ├── models/
-│   │   │   ├── regularization_classic.py
-│   │   │   └── train_classic.py        # Classic ML training script
-│   │   └── utils/
-│   │       └── plots.py                # Classic ML visualization helpers
+│   │   ├── datasets/                   # Classic ML dataset preparation
+│   │   ├── features/                   # Time-domain and frequency-domain EMG features
+│   │   ├── models/                     # Classic ML training and regularization scripts
+│   │   ├── utils/                      # Plotting and helper utilities
+│   │   └── README_CLASSIC.md           # Classic ML module notes
 │   │
 │   ├── cnn/
-│   │   ├── datasets/
-│   │   │   └── cnn_dataset.py          # Dataset preparation for CNN models
-│   │   ├── models/
-│   │   │   ├── model_cnn.py            # CNN architecture
-│   │   │   └── train_cnn_dummy.py      # CNN training entrypoint
-│   │   ├── transforms/
-│   │   │   └── spectrograms.py         # Spectrogram generation
-│   │   ├── demo_spectrograms.py
-│   │   ├── example_simple.py
-│   │   └── test_spectrograms.py
+│   │   ├── datasets/                   # Spectrogram dataset wrapper
+│   │   ├── models/                     # CNN model and training pipeline
+│   │   ├── transforms/                 # Spectrogram generation
+│   │   ├── README.md                   # CNN module documentation
+│   │   ├── demo_spectrograms.py        # Spectrogram demonstration script
+│   │   ├── example_simple.py           # Minimal CNN example
+│   │   └── test_spectrograms.py        # Spectrogram testing script
 │   │
 │   └── rnn/
-│       ├── datasets/
-│       │   └── sequence_dataset.py     # Dataset preparation for sequence models
-│       ├── features/
-│       │   └── seq_features.py         # Sequence feature extraction
-│       └── models/
-│           ├── model_rnn.py            # RNN / LSTM model definition
-│           └── train_rnn.py            # RNN training script
+│       ├── datasets/                   # Sequence dataset preparation
+│       ├── features/                   # Sequential EMG feature extraction
+│       └── models/                     # GRU/LSTM models and RNN training script
 │
-├── assets/
-│   ├── classic_ml/                     # README figures for classic ML results
-│   ├── cnn/                            # README figures for CNN results
-│   └── presentations/                  # Presentation and project media
-│
-├── streamlit_app.py                    # Streamlit interface for demos and model interaction
-├── requirements.txt
-├── LICENSE
-└── README.md
+├── streamlit_app.py                    # Streamlit demo interface
+├── requirements.txt                    # Python dependencies
+├── LICENSE                            # MIT license
+├── README.md                          # Main project documentation
+└── .gitignore
 ```
 
 The repository now includes source code, a Streamlit app entrypoint, local dataset workspace folders, generated experiment outputs, and tracked visual assets used throughout the documentation.
