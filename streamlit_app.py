@@ -415,7 +415,7 @@ def rnn_sequence_tensor(
         basic_feat=True,
         shape_feat=True,
         spectral_feat=True,
-        deltas=False,
+        deltas=any(name.endswith("_delta") for name in loaded_rnn["artifact"].get("feature_names", [])),
     )
 
     expected_dim = int(loaded_rnn["artifact"]["input_dim"])

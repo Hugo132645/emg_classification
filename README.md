@@ -38,6 +38,7 @@ The repository is organized around three complementary modelling tracks:
 - [Signal Preprocessing](#signal-preprocessing)
 - [Windowing](#windowing)
 - [Modelling Tracks](#modelling-tracks)
+- [Model Comparison: Classic ML vs RNN](#model-comparison-classic-ml-vs-rnn)
 - [Evaluation Protocol](#evaluation-protocol)
 - [Metrics](#metrics)
 - [Project Demo](#project-demo)
@@ -848,6 +849,39 @@ standardizer_std
 
 This makes the trained model easier to reload for later testing, comparison, or future real-time prosthetic-arm inference.
 
+#### Reproduced Results
+
+The numbers below come from `artifacts/best_gru_2026-07-07_19-24-24.pt` (Bi-GRU, `seq_length=32`, `hidden_dim=128`, 48 features — 24 base + delta features, 2 layers, bidirectional), measured on 48,898 validation sequences (Exercise 2, repetitions 9–10, channels 0/1, 18 classes: 17 gestures + rest).
+
+| Metric | Value |
+| --- | ---: |
+| Overall accuracy | 84.5% |
+| Macro F1 | 0.737 |
+| Rest share of validation set | 54.4% |
+| Rest-only accuracy | 96.8% |
+| **Accuracy excluding rest (17 gestures only)** | **70.1%** |
+| Per-class F1 range (17 gestures) | 0.679 – 0.794 |
+
+**Read the 84.5% carefully — rest makes up 54.4% of the validation set and is classified at 96.8% accuracy** (resting EMG, near-zero muscle activity, is naturally easy to separate from any gesture). The number that actually reflects gesture-recognition ability is **70.1% excluding rest**. All 17 gesture classes land in a tight 0.68–0.79 F1 band, with no class collapsing toward zero — this is the strongest evidence that the model is genuinely learning per-gesture structure rather than just calling "rest" most of the time.
+
+See [Model Comparison: Classic ML vs RNN](#model-comparison-classic-ml-vs-rnn) below for the full caveats (reduced channel count, rest-class weighting) before treating either figure as final.
+
+<p align="center">
+  <img src="assets/rnn/rnn_tsne_embeddings.png" alt="t-SNE of GRU sequence embeddings" width="48%">
+  <img src="assets/rnn/rnn_umap_embeddings.png" alt="UMAP (3D) of GRU sequence embeddings" width="48%">
+</p>
+<p align="center">
+  <em>t-SNE of the GRU's learned sequence embeddings (validation set)</em> &nbsp;&nbsp;&nbsp;&nbsp; <em>UMAP (3D) of the same embeddings</em>
+</p>
+
+<p align="center">
+  <img src="assets/rnn/rnn_confusion_matrix.png" alt="GRU validation confusion matrix" width="48%">
+  <img src="assets/rnn/rnn_per_class_f1.png" alt="GRU per-class F1 scores" width="48%">
+</p>
+<p align="center">
+  <em>Validation confusion matrix (row-normalized)</em> &nbsp;&nbsp;&nbsp;&nbsp; <em>Per-class F1, sorted, with macro F1 reference line</em>
+</p>
+
 #### Why This Track Matters
 
 The RNN/BRNN track is important because prosthetic control is inherently temporal. Muscle activation is not just defined by one instant of signal activity, but by the pattern of activation across time.
@@ -855,6 +889,67 @@ The RNN/BRNN track is important because prosthetic control is inherently tempora
 Compared with classic machine learning, the recurrent approach can capture temporal movement dynamics. Compared with CNN-based spectrogram classification, it focuses directly on the evolution of extracted EMG features across consecutive windows.
 
 This makes the RNN/BRNN track a strong candidate for future real-time EEG/EMG prosthetic control, where stable and responsive intent prediction is essential.
+
+---
+
+## Model Comparison: Classic ML vs RNN
+
+This section compares the **Classic ML track** against the **RNN/BRNN track** on the same evaluation split — Exercise 2, validation repetitions 9–10, 2 EMG channels (ch0, ch1), 18 gesture classes (17 gestures + rest).
+
+Only the current best RNN checkpoint is shown below (`artifacts/best_gru_2026-07-07_19-24-24.pt`). Earlier GRU runs (a 62.6%-accuracy baseline and a 73.5%-accuracy "improved" run) are superseded and omitted — the 73.5% checkpoint is also no longer usable (corrupted on disk after training, unrelated to modeling).
+
+### Headline Results
+
+| Model | Val Accuracy | Macro F1 | Notes |
+| --- | ---: | ---: | --- |
+| Logistic Regression | 43.3% | 0.104 | Linear baseline |
+| XGBoost | 44.9% | 0.142 | Gradient-boosted trees |
+| Random Forest | 45.0% | 0.145 | Strongest classic ML baseline |
+| **Bi-GRU** (`best_gru_2026-07-07_19-24-24.pt`) | **84.5%** | **0.737** | `seq_length=32`, `hidden_dim=128`, 48 features (24 base + delta features), bidirectional, 2 layers |
+
+Measured directly via `rnn_metrics_check.py` on 48,898 validation sequences (not just the checkpoint's self-reported `best_val_acc`):
+
+| Metric | Value |
+| --- | ---: |
+| Overall accuracy | 84.5% |
+| Macro F1 | 0.737 |
+| Rest share of validation set | 54.4% |
+| Rest-only accuracy | 96.8% |
+| **Accuracy excluding rest (17 gestures only)** | **70.1%** |
+| Per-class F1 range (17 gestures) | 0.679 – 0.794 |
+
+### Why the RNN Wins
+
+- **Temporal context.** The RNN consumes a *sequence* of 32 consecutive feature windows, letting it learn how muscle activation evolves over time. Classic ML classifies a single window in isolation, with no memory of what came before.
+- **Delta features.** 24 of the 48 input features are frame-to-frame deltas of the base statistics, giving the model explicit short-term dynamics instead of forcing it to infer them purely from the raw sequence.
+- **Macro F1 confirms this isn't just a rest-class effect.** All 17 gesture classes land in a tight 0.68–0.79 F1 band — no class collapses to near-zero the way several classic ML classes effectively do (see below). The RNN's advantage holds up per-class, not just in aggregate accuracy.
+
+### Where Classic ML Still Has an Edge
+
+Classic ML is not without merit — with a confidence-threshold rejection rule (`tau=0.6`), it reaches **76.8% accuracy on accepted predictions**, higher than the GRU's rest-excluded 70.1%. The tradeoff is that it abstains (rejects) **56% of windows** to get there, i.e. it only commits to a prediction when it's confident, at the cost of coverage. For a real-time prosthetic control signal, this reject-and-wait behavior may or may not be acceptable depending on the target application — it trades responsiveness for reliability.
+
+Classic ML's low macro-F1 (~0.10–0.15) across the board also indicates it performs close to random on many of the 18 gesture classes, even where its raw accuracy looks reasonable — a sign of class imbalance combined with the lack of temporal context making rare/similar gestures hard to separate from single windows. This is the direct contrast to the RNN's 0.737 macro F1.
+
+### Known Caveats — Read Before Trusting the 84.5% Number
+
+These were raised and checked directly against this checkpoint; recorded here rather than silently smoothed over.
+
+1. **84.5% overall accuracy is inflated by the rest class.** Rest makes up 54.4% of the validation set and is classified at 96.8% accuracy (it's an easy class — near-zero muscle activity is naturally distinct from any gesture). The number that actually reflects gesture-recognition ability is **70.1% excluding rest**. Report that number, not 84.5%, when comparing against other gesture-recognition work.
+2. **Only 2 of the NinaPro channels are used** (channels 0 and 1), not the full electrode array. The 70.1% rest-excluded, 17-class accuracy should be read in that context — it's a reduced-channel result, and would need to be re-benchmarked against full-channel classic ML/RNN runs (not done here) to know how much accuracy is being left on the table by dropping channels.
+
+### Summary
+
+| Property | Classic ML | RNN (Bi-GRU) |
+| --- | --- | --- |
+| Best accuracy | 45.0% raw (RF), 76.8% with `tau=0.6` reject option | 84.5% raw, 70.1% excluding rest, no rejection |
+| Macro F1 | ~0.10–0.15 (weak — several classes near-random) | 0.737 (all 17 gesture classes in 0.68–0.79 band) |
+| Temporal context | None (single window) | Yes (32-window sequence) |
+| Coverage | Full, or ~44% with `tau=0.6` rejection | Full (always predicts) |
+| Reproducibility | Not re-measured across runs | ~11pp run-to-run spread observed (73.5–84.5%) — not yet stabilized |
+| Interpretability | High | Low |
+| Best use case | Fast baseline, debugging feature quality | Primary model for continuous real-time control |
+
+**Recommendation:** the RNN track (48-feature delta configuration, `seq_length=32`, `hidden_dim=128`) is the stronger model for prosthetic control — its macro F1 and rest-excluded accuracy both clearly beat classic ML's equivalents, and it doesn't need to reject ambiguous windows to do it. That said, treat 84.5% as an optimistic single-run number: the honest headline figure is **~70% on the 17 real gesture classes**. Classic ML remains useful as a fast, interpretable sanity check on feature separability and data quality before committing to RNN training runs.
 
 ---
 

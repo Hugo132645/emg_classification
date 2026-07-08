@@ -197,6 +197,7 @@ def make_dataloaders_np(
     selected_channels: tuple[int, ...] | None = None,
     include_rest: bool = True,
     rest_val_ratio: float = 0.2,
+    deltas: bool = False,
 ):
     if include_rest and drop_rest:
         raise ValueError("include_rest=True requires drop_rest=False")
@@ -294,7 +295,7 @@ def make_dataloaders_np(
             basic_feat=True,
             shape_feat=True,
             spectral_feat=True,
-            deltas=False,
+            deltas=True,
         )
 
         if ft_names is None:
@@ -789,7 +790,7 @@ def predict_with_model(model, loader, device, label_names=None):
 if __name__ == "__main__":
     sd = 42
     config = load_cfg()
-    seq_length = 16
+    seq_length = 32
     seq_stride = 1
     selected_channels = (0, 1)
     allowed_exercises = (2,)
@@ -822,7 +823,7 @@ if __name__ == "__main__":
         rest_val_ratio=0.1,
     )
 
-    hidden_dim = 64
+    hidden_dim = 128
     num_layers = 2
     dropout = 0.2
     lr = 5e-4
