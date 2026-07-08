@@ -851,20 +851,7 @@ This makes the trained model easier to reload for later testing, comparison, or 
 
 #### Reproduced Results
 
-The numbers below come from `artifacts/best_gru_2026-07-07_19-24-24.pt` (Bi-GRU, `seq_length=32`, `hidden_dim=128`, 48 features — 24 base + delta features, 2 layers, bidirectional), measured on 48,898 validation sequences (Exercise 2, repetitions 9–10, channels 0/1, 18 classes: 17 gestures + rest).
-
-| Metric | Value |
-| --- | ---: |
-| Overall accuracy | 84.5% |
-| Macro F1 | 0.737 |
-| Rest share of validation set | 54.4% |
-| Rest-only accuracy | 96.8% |
-| **Accuracy excluding rest (17 gestures only)** | **70.1%** |
-| Per-class F1 range (17 gestures) | 0.679 – 0.794 |
-
-**Read the 84.5% carefully — rest makes up 54.4% of the validation set and is classified at 96.8% accuracy** (resting EMG, near-zero muscle activity, is naturally easy to separate from any gesture). The number that actually reflects gesture-recognition ability is **70.1% excluding rest**. All 17 gesture classes land in a tight 0.68–0.79 F1 band, with no class collapsing toward zero — this is the strongest evidence that the model is genuinely learning per-gesture structure rather than just calling "rest" most of the time.
-
-See [Model Comparison: Classic ML vs RNN](#model-comparison-classic-ml-vs-rnn) below for the full caveats (reduced channel count, rest-class weighting) before treating either figure as final.
+The plots below come from `artifacts/best_gru_2026-07-07_19-24-24.pt` (Bi-GRU, `seq_length=32`, `hidden_dim=128`, 48 features — 24 base + delta features, 2 layers, bidirectional), evaluated on 48,898 validation sequences (Exercise 2, repetitions 9–10, channels 0/1, 18 classes: 17 gestures + rest). Full metrics, per-class F1, and the caveats behind them are in [Model Comparison: Classic ML vs RNN](#model-comparison-classic-ml-vs-rnn) below — headline number: **70.1% accuracy on the 17 real gesture classes** (84.5% raw, inflated by the dominant rest class).
 
 <p align="center">
   <img src="assets/rnn/rnn_tsne_embeddings.png" alt="t-SNE of GRU sequence embeddings" width="48%">
