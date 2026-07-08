@@ -41,6 +41,7 @@ The repository is organized around three complementary modelling tracks:
 - [Model Comparison: Classic ML vs RNN](#model-comparison-classic-ml-vs-rnn)
 - [Evaluation Protocol](#evaluation-protocol)
 - [Metrics](#metrics)
+- [Streamlit App](#streamlit-app)
 - [Project Demo](#project-demo)
 - [Reproducibility](#reproducibility)
 - [Roadmap](#roadmap)
@@ -367,7 +368,7 @@ Feature scaling / preprocessing
         ↓
 Classical classifier
         ↓
-Gesture prediction
+Gesture prediction + optional "no action" rejection filter
 ```
 
 This modelling path is intentionally split into a few focused scripts so baseline training, hyperparameter checks, and external-dataset validation can evolve without overloading one file.
@@ -379,6 +380,8 @@ Core files in this track:
 | `src/classic_ml/models/train_classic.py` | Builds the classic ML dataset from the repo pipeline, extracts features, trains several baseline models, compares metrics, saves artifacts, and generates evaluation plots | Main baseline training script for dummy data and repo-native experiments |
 | `src/classic_ml/models/regularization_classic.py` | Reuses the classic ML dataset builder and runs cross-validated regularization sweeps over `C` for Logistic Regression and SVM variants | Quick model-selection and hyperparameter sanity script |
 | `src/classic_ml/models/train_classic_online.py` | Adapts an external online dataset path into the classic ML feature pipeline, trains the same model family, and exports comparable reports and artifacts | Separate validation script for Ninapro-based experiments |
+
+The classic ML inference path also includes an optional **"no action" rejection filter**. When a model supports `predict_proba`, predictions below a confidence threshold are rejected and labeled as `no_action` instead of forcing a gesture class. This is useful for reducing low-confidence false activations in downstream control scenarios.
 
 Typical feature families used in this pipeline:
 
@@ -442,6 +445,7 @@ Generated plots and report artifacts:
 | t-SNE 2D and 3D projections | `train_classic.py`, `train_classic_online.py` | Visualizes nonlinear class structure in feature space |
 | UMAP 2D and 3D projections | `train_classic.py`, `train_classic_online.py` | Alternative manifold view of class clustering when `umap-learn` is available |
 | Regularization curve (`C`) | `regularization_classic.py` | Shows how Logistic Regression and SVM performance changes with regularization strength |
+| No-action evaluation JSON | `train_classic.py`, `train_classic_online.py` | Stores rejection-layer metrics such as coverage, reject rate, and accepted-sample performance |
 
 Example outputs from the current Classic ML workflow:
 
@@ -1011,6 +1015,78 @@ Recommended metrics:
 | Throughput | Inference speed |
 
 The most important metric is **Macro-F1**, because prosthetic control requires reliable performance across all movement classes, not only the most frequent class.
+
+---
+
+## Streamlit App
+
+The repository includes a Streamlit-based **EMG replay dashboard** implemented in `streamlit_app.py`. It is meant to make trained pipelines easier to inspect interactively by replaying recordings window by window and comparing model outputs against ground truth.
+
+Run it with:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+<p align="center">
+  <img src="assets/streamlit/replay_dashboard.png" alt="Streamlit EMG replay dashboard" width="90%">
+</p>
+<p align="center">
+  <em>Streamlit replay dashboard showing recording selection, channel configuration, ground truth, and live model predictions.</em>
+</p>
+
+At a high level, the app works like this:
+
+```text
+Recorded EMG file
+        ↓
+Replay cursor selects the current window
+        ↓
+Preprocessing is applied to the selected channels
+        ↓
+Each loaded artifact runs its own prediction path
+        ↓
+Ground truth, probabilities, confidence, and history are displayed
+```
+
+The dashboard automatically searches for EMG recordings plus saved Classic ML (`.joblib`), CNN (`.pth`), and RNN (`.pt`) artifacts, so the same interface can be used to inspect multiple modelling tracks.
+
+The replay is driven by a cursor over the recording. For each position, the app reconstructs the active window, applies the selected preprocessing mode, runs the chosen artifacts, and displays both predictions and ground truth for that moment in time.
+
+Sidebar controls:
+
+| Control | What It Does |
+| --- | --- |
+| `Recording` | Selects the EMG file to replay |
+| `Channels` | Chooses which EMG channels are visible and available for inference |
+| `Models` | Loads one or more saved artifacts so their predictions can be compared side by side |
+| `Preprocess mode` | Applies `none`, `raw`, or `envelope` preprocessing before inference |
+| `Show panels` | Toggles which dashboard panels are visible |
+| `Override NO ACTION threshold` | Lets the user replace the artifact's stored rejection threshold during replay |
+| `Replay speed` | Controls how fast the cursor advances during playback |
+| `History windows` | Controls how much past prediction history is shown |
+
+How each track is handled:
+
+| Track | Inference Path |
+| --- | --- |
+| **Classic ML** | Preprocesses the selected window, extracts time-domain and frequency-domain features, applies the saved scaler if present, then runs the classifier from the `.joblib` artifact |
+| **CNN** | Preprocesses each selected channel, converts the current window into spectrogram input, runs the CNN checkpoint, and averages channel-level probabilities |
+| **RNN / LSTM / GRU** | Reconstructs a sequence of recent windows, computes sequence features, standardizes them using the saved statistics, and feeds them into the recurrent model |
+
+Main panels:
+
+| Panel | Purpose |
+| --- | --- |
+| `Ground truth` | Shows the control label, raw label, repetition, subject, and exercise at the current replay position |
+| `Current predictions` | Shows the predicted label, correctness, confidence, acceptance flag, and latency for each loaded model |
+| `Probabilities` | Displays class probabilities in both table and bar-chart form when the model exposes them |
+| `Prediction history` | Tracks recent predictions, confidence trends, and gesture IDs over time |
+| `Raw signal` | Shows the current input window before preprocessing |
+| `Processed signal` | Shows the same window after the chosen preprocessing path |
+| `Metadata` | Summarizes sample count, selected channels, timestamp, device, and channel usage per model |
+
+The dashboard also exposes the **NO ACTION** rejection logic. If a model supports probabilities, low-confidence predictions can be filtered and displayed as `no_action` instead of forcing a gesture label. That makes the app useful not just for demos, but also for comparing model stability in a more control-oriented setting.
 
 ---
 
