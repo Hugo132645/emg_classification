@@ -356,8 +356,7 @@ This allows all model tracks to use the same segmentation strategy.
 ## Modelling Tracks
 
 ### 1. Classic Machine Learning
-
-The classic ML track treats each EMG window as a structured feature vector and trains lightweight supervised models on top of those descriptors. It is currently the most stable baseline on `main` and serves as the clearest interpretable reference point for the rest of the project.
+The classic ML track treats each EMG window as a structured feature vector and trains lightweight supervised models on top of those descriptors. It is currently the clearest interpretable baseline in the repository and helps us validate preprocessing, feature separability, and class behavior before leaning on heavier neural architectures.
 
 ```text
 Windowed EMG signal
@@ -371,7 +370,15 @@ Classical classifier
 Gesture prediction
 ```
 
-This modelling path is useful early in the project because it helps us validate data quality, feature separability, and class behavior before relying on heavier neural architectures.
+This modelling path is intentionally split into a few focused scripts so baseline training, hyperparameter checks, and external-dataset validation can evolve without overloading one file.
+
+Core files in this track:
+
+| File | What It Does | Current Role |
+| --- | --- | --- |
+| `src/classic_ml/models/train_classic.py` | Builds the classic ML dataset from the repo pipeline, extracts features, trains several baseline models, compares metrics, saves artifacts, and generates evaluation plots | Main baseline training script for dummy data and repo-native experiments |
+| `src/classic_ml/models/regularization_classic.py` | Reuses the classic ML dataset builder and runs cross-validated regularization sweeps over `C` for Logistic Regression and SVM variants | Quick model-selection and hyperparameter sanity script |
+| `src/classic_ml/models/train_classic_online.py` | Adapts an external online dataset path into the classic ML feature pipeline, trains the same model family, and exports comparable reports and artifacts | Separate validation script for Ninapro-based experiments |
 
 Typical feature families used in this pipeline:
 
@@ -400,13 +407,45 @@ Why this track matters:
 | Reliable baseline | Gives the CNN and RNN/LSTM tracks a grounded benchmark |
 | Debugging utility | Helps surface data quality or feature-separation problems early |
 
-Current implementation status:
+Dataset and implementation status:
 
-- `main` contains the version adapted to the shared repository structure and currently works on dummy data for development, debugging, and visualization.
-- The branch `classicML_testing` contains an adapted version used to test on an online dataset that does **not** match the intended EMG data format of this repository.
-- That branch is intentionally kept separate from `main` so the core pipeline can stay aligned with the project's target data structure while the external dataset experiments remain isolated.
+| Path | Data Source | Why It Exists |
+| --- | --- | --- |
+| `train_classic.py` on `main` | Dummy data by default, with the repo-native pipeline path available for shared-format EMG experiments | Keeps the main baseline stable for development, debugging, and app integration |
+| `train_classic_online.py` on `main` | **Ninapro DB1** validation flow, currently filtered to Exercise 2 (`KEEP_EXERCISES = {2}`) | Lets the team test the classic ML pipeline on a known public EMG dataset |
+
+The Ninapro-specific training file was kept separate because the external dataset does **not** follow the same format assumptions as the rest of this project. In practice that means separate loading, label remapping, exercise filtering, and multichannel preprocessing logic are needed before the shared feature extraction stage can be reused cleanly.
+
+Observed online Ninapro results from the current work-in-progress run:
+
+| Model | Accuracy | Macro F1 | Precision | Recall |
+| --- | ---: | ---: | ---: | ---: |
+| Random Forest | 0.773954 | 0.558932 | 0.637073 | 0.508944 |
+| XGBoost | 0.734483 | 0.463698 | 0.512651 | 0.432260 |
+| Logistic Regression | 0.672263 | 0.321894 | 0.362522 | 0.298070 |
+
+These numbers are worth showing because they give a concrete first-pass baseline on the external validation dataset, while also making it clear that performance is still below the level needed for a finished system.
+
+SVM models were not included in that online comparison run because scikit-learn does not give meaningful control over the execution hardware for that training setup, and the SVM variants were too computationally demanding for the available run environment.
+
+Generated plots and report artifacts:
+
+| Output | Produced By | Purpose |
+| --- | --- | --- |
+| Model score bar chart | `train_classic.py`, `train_classic_online.py` | Compares macro F1, accuracy, precision, and recall across candidate models |
+| Best-model confusion matrix | `train_classic.py`, `train_classic_online.py` | Highlights the strongest selected classifier |
+| Per-model confusion matrices | `train_classic.py`, `train_classic_online.py` | Shows failure modes for every trained model |
+| Random Forest feature importance | `train_classic.py`, `train_classic_online.py` | Helps interpret which engineered features drive predictions |
+| XGBoost feature importance | `train_classic.py`, `train_classic_online.py` | Adds a second feature-importance view for boosted trees |
+| Per-class F1 bar chart | `train_classic.py`, `train_classic_online.py` | Shows which gestures are easier or harder to classify |
+| PCA 2D projection | `train_classic.py`, `train_classic_online.py` | Gives a quick linear view of feature separability |
+| t-SNE 2D and 3D projections | `train_classic.py`, `train_classic_online.py` | Visualizes nonlinear class structure in feature space |
+| UMAP 2D and 3D projections | `train_classic.py`, `train_classic_online.py` | Alternative manifold view of class clustering when `umap-learn` is available |
+| Regularization curve (`C`) | `regularization_classic.py` | Shows how Logistic Regression and SVM performance changes with regularization strength |
 
 Example outputs from the current Classic ML workflow:
+
+The figures shown below are taken from the **dummy-data pipeline** on purpose. They are visually cleaner and better for illustrating how the classic ML reporting tools work. Using equivalent projections and confusion plots from the online **17-gesture Ninapro** setup would make the visuals much more crowded and harder to read, which is less helpful in the README.
 
 <p align="center">
   <img src="assets/classic_ml/confusion_matrix_rf_1777802744.png" alt="Random Forest confusion matrix" width="48%">
