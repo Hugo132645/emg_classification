@@ -1092,29 +1092,13 @@ The dashboard also exposes the **NO ACTION** rejection logic. If a model support
 
 ## Project Demo
 
-The project includes a physical prosthetic robotic arm prototype used for demonstrations and experimentation.
+The project was demonstrated at 2026 **WAICF — World AI Cannes Festival** in Cannes, France.
 
-Demo media can be stored in:
+[https://github.com/user-attachments/assets/PASTE-YOUR-VIDEO-ID-HERE](https://github.com/user-attachments/assets/baf7e607-be31-4fb0-aca5-47e91cb07d54)
 
-```text
-assets/demo/
-```
-
-Example:
-
-```md
 <p align="center">
-  <img src="assets/demo/prosthetic_arm_demo.gif" alt="Prosthetic arm demo" width="700">
+  <em>Team demo presentation of the EEG/EMG prosthetic arm project at WAICF, Cannes.</em>
 </p>
-```
-
-Suggested demo caption:
-
-```md
-<p align="center">
-  <em>Prototype demonstration of biosignal-based prosthetic arm control.</em>
-</p>
-```
 
 ---
 
