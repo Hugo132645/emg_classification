@@ -1104,28 +1104,73 @@ The project was demonstrated at 2026 **WAICF — World AI Cannes Festival** in C
 
 ## Reproducibility
 
-For reproducible experiments, each run should save:
+The repository keeps experiments reproducible through a shared configuration file and consistent output artifacts.
+
+The main configuration file is:
 
 ```text
-run.json
-config.yaml
-metrics.json
-confusion_matrix.png
-model_weights.pt
+configs/preprocessing.yaml
 ```
 
-Recommended information to store:
+This file defines the core experiment settings used across the pipeline, including signal acquisition, windowing, gesture labels, label mapping, and file-path templates.
 
-- Git commit hash.
-- Random seed.
-- Dataset version.
-- Subject split.
-- Preprocessing configuration.
-- Model hyperparameters.
-- Training duration.
-- Evaluation metrics.
+Current default settings:
 
-This makes experiments easier to compare across model tracks.
+| Setting | Value |
+|---|---:|
+| Sampling rate | `1000 Hz` |
+| Channels | `3` |
+| Window size | `200 ms` |
+| Hop size | `100 ms` |
+| Classes | `rest`, `fist`, `open`, `pinch` |
+
+The configuration also defines the data collection protocol:
+
+| Protocol setting | Value |
+|---|---:|
+| Rest duration | `5 s` |
+| Gesture hold duration | `3 s` |
+| Relax duration | `2 s` |
+| Repetitions per gesture | `10` |
+| Sessions per day | `2` |
+| Days | `3` |
+
+Model outputs are saved under the repository export folders, including:
+
+```text
+exports/classic_ml/
+exports/classic_ml_best/
+exports/classic_ml_online/
+exports/classic_ml_online_best/
+exports/cnn/
+exports/rnn/
+```
+
+For the RNN/BRNN track, the saved model artifact includes both the trained weights and the metadata needed to reproduce inference:
+
+```text
+state_dict
+model_type
+input_dim
+hidden_dim
+num_layers
+bidirectional
+dropout
+label_map
+feature_names
+standardizer_mean
+standardizer_std
+```
+
+This ensures that trained models can be reloaded with the same feature representation, label mapping, and normalization parameters used during training.
+
+Overall, reproducibility in this repository is based on:
+
+- Keeping preprocessing settings centralized in `configs/preprocessing.yaml`.
+- Using the same gesture labels and label map across model tracks.
+- Saving trained model artifacts under structured `exports/` folders.
+- Storing model metadata together with the trained weights when required.
+- Reusing the same shared preprocessing and windowing utilities across Classic ML, CNN, and RNN/BRNN pipelines.
 
 ---
 
